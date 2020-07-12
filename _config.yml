@@ -1,0 +1,36 @@
+# Site settings
+title: Umer Farooq
+description: 'Business Card Page'
+url: 'https://umer-farooq.github.io//portfolio/'
+baseurl: 'https://umer-farooq.github.io//portfolio/'
+profilepic: '/images/ufarooq.jpg'
+bkimage: '/images/bk1.jpg'
+google_analytics: UA-XXXXXX-X
+font_awesome: 'a076d05399.js'
+
+author:
+  name: 'Umer Farooq'
+  email: umercis@gmail.com
+  twitter_username: the1umerfarooq
+#  facebook_username: joshgerdes
+  github_username:  umer-farooq
+  linkedin_username:  umer-farooq-the-one
+  meetup_name:
+
+# Build settings
+destination: _site
+markdown: kramdown
+highlighter: rouge
+
+sass:
+    sass_dir: _sass
+    style: compressed
+
+kramdown:
+  # use Github Flavored Markdown
+  input: GFM
+  # do not replace newlines by <br>s
+  hard_wrap: false
+
+#plugins: ['jekyll-paginate']
+exclude: ['README.md', 'screenshot-overview.png']
