@@ -1,226 +1,14 @@
-import boto3
-import pbcore.logger as logger
-from datetime import datetime
-import utility.propertyutil as propertyutil
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
-import os
-from pbcore.aws.parameterstore import get_lambda_ssm_param_value
-import utility.propertyutil as property_util
-import json
-
-LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
-
-
-table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
-
-
-dynamodb = boto3.client('dynamodb')
-
-"""
-Method for fetch by deviceId
-"""
-
-def fetch_by_deviceId(deviceId):
-    try:
-        print(f'deviceId:{deviceId}')
-        response = dynamodb.get_item(
-            TableName = table_name,
-            Key={"device_id": {"S": deviceId}}
-        )
-        logger.info(f"Database record {response}")
-        item = response["Item"]
-        return item
-    except Exception as err:
-        logger.error(f"fetch record error {err}")
-
-"""
-Method for delete by deviceId
-"""
-def delete_by_deviceId(deviceId):
-    try:
-        response = dynamodb.delete_item(TableName=table_name,
-            Key={"device_id": {"S": deviceId}}
-        )
-        logger.info(f"Database record {response}")
-        item=response
-        return item
-    except Exception as err:
-        logger.error(f"delete record error {err}")
-
-
-
-"""
-Method for save record in dynamo db
-"""
-
-
-def insert_device_details(record):
-    logger.info("Create the Record in DynamoDB")
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    
-    try:
-        response=dynamodb.put_item(TableName = table_name, Item = {
-                    "customer_Id": {'S' : record['customerId']},
-                    "cif": {'S' : record['cif']},
-                    "device_id": {'S' : record['deviceId']},
-                    "device_type": {'S' : record['deviceType']},
-                    "token": {'S' : record['token']},
-                    "platform": {'S' : record['platform']},
-                    "app_version": {'S' : record['appVersion']},
-                    "os_version": {'S' : record['osVersion']},
-                    "make": {'S' : record['make']},
-                    "model": {'S' : record['model']},
-                    "language": {'S' : record['language']},
-                    "created_at": {'S' : date_time},
-                    "modfied_at": {'S' : date_time}
-                 })
-        print(f'Insert response:{response}')
-
-    except Exception as e:
-       logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
-
-"""
-Method for update device details
-"""
-
-
-def update_device_details(record):
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    
-    logger.info(
-        f"Updating fields"
-    )
-    try:
-        response = dynamodb.update_item(TableName = table_name,
-            Key={"device_id": {'S': record["deviceId"]}},
-            AttributeUpdates={"cif": {'Value' : {'S' : record['cif']}},
-                    "customer_id": {'Value' : {'S' : record['deviceId']}},
-                    "device_type": {'Value' : {'S' : record['deviceType']}},
-                    "token": {'Value' : {'S' : record['token']}},
-                    "platform": {'Value' : {'S' : record['platform']}},
-                    "app_version": {'Value' : {'S' : record['appVersion']}},
-                    "os_version": {'Value' : {'S' : record['osVersion']}},
-                    "make": {'Value' : {'S' : record['make']}},
-                    "model": {'Value' : {'S' : record['model']}},
-                    "language": {'Value' : {'S' : record['language']}},
-                    "modfied_at": {'Value' : {'S' : date_time}}
-                
-            })
-        print(f'Record Updated:{response}')
-    except ClientError as err:
-        logger.error(
-            f"Unable to update device details for deviceId: {record["deviceId"]}"
-        )
-        raise
-    logger.info(f"Updated device details")
-    return response
-
-----------------------------------------------
-import httpx
-import asyncio
-from .logger import info
-
-'''
-    invoke async httpx DELETE method 
-
-    arguments:
-        url(str): base url
-        headers(dict): headers for rest call
-        ssl_context: ssl_context required for rest call
-        path_params(dict): path params to replace url with respective path parameters values
-        query_params(dict): query params required for rest call
-        logger_data(dist): logger data
-'''
-def async_delete(url, headers, ssl_context, path_params = None, query_params = None, logger_data=None): 
-
-    if(logger_data is not None and path_params is not None):
-        info(f"path_params: {path_params}", **logger_data)
-
-    if(logger_data is not None and query_params is not None):
-        info(f"query_params: {query_params}", **logger_data)
-    
-    url = check_path_params_and_update_url(url, path_params)
-    if(logger_data is not None):
-        info(f"url: {url}", **logger_data)
-    
-    asyncio.run(async_delete_connector(url, headers, ssl_context, query_params))
-                         
-'''
-     calling async httpx get method without waiting for response
-'''
-async def async_delete_connector(url, headers, ssl_context, params):
-    async with httpx.AsyncClient(verify=ssl_context) as client:
-        
-        response = await client.delete(
-            url,
-            headers=headers,
-            params=params
-        )
-        
-        return response
-
-"""
-    check path_params are present
-    if present replace the url with respective path parameters values
-"""
-def check_path_params_and_update_url(url, path_params):
-
-    if path_params is not None and type(path_params) == dict:
-        for key, value in path_params.items():
-            if (key is not None and key != "") and (value is not None and value != ""):
-                url = url.replace("{" + key + "}", str(value))
-
-    return url
--------------------------------------
-import configparser
-import os
-
-
-app_config = configparser.RawConfigParser()
-config_file_path = os.path.join(os.path.dirname(__file__), "application.cfg")
-app_config.read(config_file_path)
-
-app_message_config = configparser.RawConfigParser()
-message_config_file_path = os.path.join(
-    os.path.dirname(__file__), "message_constant.cfg"
-)
-app_message_config.read(message_config_file_path)
-
-
-"""
-Method for geting data from local property
-"""
-
-
-def getConfigValue(key):
-    return app_config.get("info", key)
-
-
-"""
-Method for geting URL data from local property
-"""
-
-
-def get_message_from_constant(key):
-    return app_message_config.get("info", key)
-
-
-"""
-Method for get eniviroment value
-"""
-
-
-def getValue(key):
-    return os.environ[key]
-
-------------------------------------
 import os
 import pbcore.logger as logger
 import pbcore.header as header
+import service.DatabaseHandler as database_handler
+import service.EndpointHandler as endpoint_handler
+import service.PbDbService as pbdbservice 
+from enums.ActionType import ActionType
 import json
+from model.DeviceTokenDetails import DeviceTokenDetails
+
+PLATFORM_APPLICATION_ARN = 'arn:aws:sns:me-central-1:517606038493:app/GCM/firebase_uat'
 
 LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
@@ -228,7 +16,7 @@ LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 """
 Method to extract_message_from_sqs
 """
-def extract_message_from_sqs(event):
+def lambda_handler(event,context):
 
         batch_item_failures = []
         sqs_batch_response = {}
@@ -256,4 +44,42 @@ def extract_message_from_sqs(event):
 
 
 def service_orchestrator(message_data, message_headers, logger_data):
-     print("Hello")
+    if(message_data["action"].upper()==ActionType.MODIFY.value):
+        logger.info("Action is Modified")
+        print(f'{message_data["deviceId"]}')
+        item = database_handler.fetch_by_deviceId(message_data["deviceId"])
+        
+        if item is not None:
+            logger.info("Item available")
+            endpoint = item["endpoint_arn"]
+            if((message_data["token"] == item["token"]) and item["endpoint_arn"] is not None):
+                logger.info("Token Matching and Arn is available")
+                database_handler.update_device_details(prepare_device_token_details_request(message_data,endpoint))
+            elif((message_data["token"] != item["token"]) and item["endpoint_arn"] is not None):
+                endpoint_handler.delete_endpoint(endpoint['EndpointArn'], message_data["token"])
+                endpoint = endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
+                database_handler.update_device_details(message_data)
+            elif((message_data["token"] != item["token"]) and item["endpoint_arn"] is None):   
+                endpoint = endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
+                database_handler.update_device_details(message_data)
+
+            pbdbservice.create_or_update_record(message_data,message_headers)    
+        else:
+            logger.info("Item not available")
+            endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
+            database_handler.insert_device_details(message_data)      
+    elif(message_data["action"].upper()==ActionType.DELETE.value):
+            print("Action is Delete")
+            print("delete endpoint")
+            database_handler.delete_by_deviceId(message_data["deviceId"])
+            pbdbservice.delete_record(message_data,message_headers)
+
+'''
+    Prepare request for Device Token Details Data
+'''
+def prepare_device_token_details_request(message_data,endpoint):
+    logger.info("preparing device token details request...")
+    return DeviceTokenDetails(
+         message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
+         message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint
+         ).to_json()
