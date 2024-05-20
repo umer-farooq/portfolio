@@ -1,183 +1,143 @@
-import os
+import boto3
 import pbcore.logger as logger
-import pbcore.header as header
-import service.DatabaseHandler as database_handler
-import service.EndpointHandler as endpoint_handler
-import service.PbDbService as pbdbservice 
-from enums.ActionType import ActionType
+from datetime import datetime
+import service.PropertyUtil as propertyutil
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+import os
+from pbcore.aws.parameterstore import get_lambda_ssm_param_value
+import service.PropertyUtil as property_util
 import json
-from model.DeviceTokenDetails import DeviceTokenDetails
-
-PLATFORM_APPLICATION_ARN = 'arn:aws:sns:me-central-1:517606038493:app/GCM/firebase_uat'
+from boto3.dynamodb.types import TypeDeserializer
+from boto3.dynamodb.types import TypeSerializer
 
 LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
 
-"""
-Method to extract_message_from_sqs
-"""
+table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
+
+
+dynamodb = boto3.client('dynamodb')
 
 """
-Method to extract_message_from_sqs
-
-Processes messages received from an SQS queue, performs orchestrations based on the message content, and logs the processing results.
-
-Args:
-- event: The event data received by the Lambda function.
-- context: The runtime information of the Lambda function.
-
-Returns:
-- dict: A dictionary containing the batch item failures during message processing.
+Method for fetch by deviceId
 """
-PLATFORM_APPLICATION_ARN = 'arn:aws:sns:me-central-1:517606038493:app/GCM/firebase_uat'
-LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
-def lambda_handler(event, context):
-    batch_item_failures = []
-    sqs_batch_response = {}
-    sqs_message = event.get("Records")
-    if not sqs_message:
-        return {"batchItemFailures": batch_item_failures}
-
-    for message in sqs_message:
-        process_message(message, batch_item_failures)
-
-    sqs_batch_response["batchItemFailures"] = batch_item_failures
-    return sqs_batch_response
-
-def process_message(message, batch_item_failures):
-    message_id = message["messageId"]
-    message_body = json.loads(message["body"])
-    message_headers = header.update_headers(message_body["headers"], message_body["data"])
-    logger_data = logger.prepare_logger_data(message_headers, message_body["data"])
-    log_message_details(message_headers, message_body["data"], logger_data)
-
+def fetch_by_deviceId(deviceId):
     try:
-        service_orchestrator(message_body["data"], message_headers, logger_data)
+        response = dynamodb.get_item(
+            TableName = table_name,
+            Key={"device_id": {"S": deviceId}}
+        )
+        item = response["Item"]
+        print(f"Device Details")
+        return dynamo_to_python(item)
+    except Exception as err:
+        logger.error(f"fetch record error {err}")
+
+"""
+Method for delete by deviceId
+"""
+def delete_by_deviceId(deviceId):
+    try:
+        response = dynamodb.delete_item(TableName=table_name,
+            Key={"device_id": {"S": deviceId}}
+        )
+        logger.info(f"Database record {response}")
+        item=response
+        return item
+    except Exception as err:
+        logger.error(f"delete record error {err}")
+
+
+
+"""
+Method for save record in dynamo db
+"""
+
+
+def insert_device_details(record):
+    logger.info("Create the Record in DynamoDB")
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    
+    try:
+        response=dynamodb.put_item(TableName = table_name, Item = {
+                    "customer_Id": {'S' : record['customerId']},
+                    "cif": {'S' : record['cif']},
+                    "device_id": {'S' : record['deviceId']},
+                    "device_type": {'S' : record['deviceType']},
+                    "token": {'S' : record['token']},
+                    "platform": {'S' : record['platform']},
+                    "app_version": {'S' : record['appVersion']},
+                    "os_version": {'S' : record['osVersion']},
+                    "make": {'S' : record['make']},
+                    "model": {'S' : record['model']},
+                    "language": {'S' : record['language']},
+                    "endpoint_arn": {'S' : record['endpoint_arn']},
+                    "created_at": {'S' : date_time},
+                    "modfied_at": {'S' : date_time}
+                 })
+        print(f'Insert response:{response}')
+
     except Exception as e:
-        logger.error(f'An unexpected error occurred : {e}', **logger_data)
-        batch_item_failures.append({"itemIdentifier": message_id})
+       logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
 
-def lambda_handler(event,context):
-
-        batch_item_failures = []
-        sqs_batch_response = {}
-        logger.info(f"event received from SQS : {event}")
-        sqs_message = event.get("Records")
-        if sqs_message is not None and len(sqs_message) > 0:
-            for message in sqs_message:
-                message_id = message["messageId"]
-                message_body = json.loads(message["body"])
-                logger.info(f"SQS Message Body: {message_body}")
-                message_headers = message_body["headers"]
-                message_data = message_body["data"]
-                message_headers = header.update_headers(message_headers, message_data)
-                logger_data = logger.prepare_logger_data(message_headers, message_data)
-                logger.info(f"headers received from SQS: {message_headers}", **logger_data)
-                logger.info(f"Data received from SQS: {message_data}", **logger_data)
-                try:
-                    service_orchestrator(message_data, message_headers, logger_data)
-                except Exception as e:
-                    logger.error(f'An unexpected error occurred : {e}', **logger_data)
-                    batch_item_failures.append({"itemIdentifier": message_id})
-            sqs_batch_response["batchItemFailures"] = batch_item_failures
-            logger.info(f"sqsBatchResponse: {sqs_batch_response}", **logger_data)
-            return sqs_batch_response
+"""
+Method for update device details
+"""
 
 
-def service_orchestrator(message_data, message_headers, logger_data):
-    if(message_data["action"].upper()==ActionType.MODIFY.value):
-        logger.info("Action is Modified")
-        print(f'{message_data["deviceId"]}')
-        item = database_handler.fetch_by_deviceId(message_data["deviceId"])
-        
-        if item is not None:
-            logger.info("Item available")
-            endpoint = item["endpoint_arn"]
-            if((message_data["token"] == item["token"]) and item["endpoint_arn"] is not None):
-                logger.info("Token Matching and Arn is available")
-                database_handler.update_device_details(prepare_device_token_details_request(message_data,endpoint))
-            elif((message_data["token"] != item["token"]) and item["endpoint_arn"] is not None):
-                endpoint_handler.delete_endpoint(endpoint['EndpointArn'], message_data["token"])
-                endpoint = endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
-                database_handler.update_device_details(message_data)
-            elif((message_data["token"] != item["token"]) and item["endpoint_arn"] is None):   
-                endpoint = endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
-                database_handler.update_device_details(message_data)
+def update_device_details(device_details):
+    print(f'Update information')
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    logger.info(
+        f"New record"
+    )
+    
+    record = python_to_dynamo(json.loads(device_details))
+    logger.info(
+        f"Serialize"
+    )
+    logger.info(
+        f"Updating fields"
+    )
+    try:
+        response = dynamodb.update_item(TableName = table_name,
+            Key={"device_id": record["deviceId"]},
+            AttributeUpdates={"cif": {'Value' : record['cif']},
+                    "customer_id": {'Value' : record['deviceId']},
+                    "device_type": {'Value' : record['deviceType']},
+                    "token": {'Value' : record['token']},
+                    "platform": {'Value' : record['platform']},
+                    "app_version": {'Value' : record['appVersion']},
+                    "os_version": {'Value' : record['osVersion']},
+                    "make": {'Value' : record['make']},
+                    "model": {'Value' : record['model']},
+                    "language": {'Value' : record['language']},
+                    "endpoint_arn": {'Value' : record['endpointArn']},
+                    "modfied_at": {'Value' : {'S' : date_time}}
+            })
+        print(f'Record Updated:{response}')
+    except ClientError as err:
+        logger.error(
+            f"Unable to update device details for deviceId: {record["deviceId"]}"
+        )
+        raise
+    logger.info(f"Updated device details")
+    return response
+    
+def dynamo_to_python(dynamo_object: dict) -> dict:
+    deserializer = TypeDeserializer()
+    return {
+        k: deserializer.deserialize(v)
+        for k, v in dynamo_object.items()
+    }
 
-            pbdbservice.create_or_update_record(message_data,message_headers)    
-        else:
-            logger.info("Item not available")
-            endpoint_handler.create_endpoint(message_data["token"], PLATFORM_APPLICATION_ARN)
-            database_handler.insert_device_details(message_data)      
-    elif(message_data["action"].upper()==ActionType.DELETE.value):
-            print("Action is Delete")
-            print("delete endpoint")
-            database_handler.delete_by_deviceId(message_data["deviceId"])
-            pbdbservice.delete_record(message_data,message_headers)
-
-'''
-    Prepare request for Device Token Details Data
-'''
-def prepare_device_token_details_request(message_data,endpoint):
-    logger.info("preparing device token details request...")
-    return DeviceTokenDetails(
-         message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
-         message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint
-         ).to_json()
-
-
------------------------------
-import pytest
-import json
-from unittest.mock import patch, MagicMock
-
-# Assuming the necessary classes and methods are imported correctly as the original code has commented out imports.
-
-@pytest.mark.parametrize("event, expected_response, test_id", [
-    # Test ID: 1 - Happy path with a single message that processes successfully
-    ({
-        "Records": [
-            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "123", "token": "abc"}})}
-        ]
-    }, {"batchItemFailures": []}, "test_id_1"),
-
-    # Test ID: 2 - Happy path with multiple messages, all processed successfully
-    ({
-        "Records": [
-            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "123", "token": "abc"}})},
-            {"messageId": "2", "body": json.dumps({"headers": {}, "data": {"action": "DELETE", "deviceId": "456"}})}
-        ]
-    }, {"batchItemFailures": []}, "test_id_2"),
-
-    # Test ID: 3 - Edge case with empty message list
-    ({
-        "Records": []
-    }, {"batchItemFailures": []}, "test_id_3"),
-
-    # Test ID: 4 - Error case where an exception is thrown during processing
-    ({
-        "Records": [
-            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "error", "token": "abc"}})}
-        ]
-    }, {"batchItemFailures": [{"itemIdentifier": "1"}]}, "test_id_4"),
-])
-def test_lambda_handler(event, expected_response, test_id):
-    # Arrange
-    with patch('pbcore.logger.logger') as mock_logger, \
-         patch('pbcore.header.update_headers', return_value={}), \
-         patch('pbcore.logger.prepare_logger_data', return_value={}), \
-         patch('Lambda.service_orchestrator') as mock_orchestrator:
-
-        # Handling the exception case
-        if test_id == "test_id_4":
-            mock_orchestrator.side_effect = Exception("Test Exception")
-
-        # Act
-        response = lambda_handler(event, None)
-
-        # Assert
-        assert response == expected_response
-        mock_logger.info.assert_called()
-        if test_id == "test_id_4":
-            mock_logger.error.assert_called_with('An unexpected error occurred : Test Exception', **{})
+def python_to_dynamo(python_object: dict) -> dict:
+    serializer = TypeSerializer()
+    return {
+        k: serializer.serialize(v)
+        for k, v in python_object.items()
+    }
