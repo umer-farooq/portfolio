@@ -16,6 +16,48 @@ LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 """
 Method to extract_message_from_sqs
 """
+
+"""
+Method to extract_message_from_sqs
+
+Processes messages received from an SQS queue, performs orchestrations based on the message content, and logs the processing results.
+
+Args:
+- event: The event data received by the Lambda function.
+- context: The runtime information of the Lambda function.
+
+Returns:
+- dict: A dictionary containing the batch item failures during message processing.
+"""
+PLATFORM_APPLICATION_ARN = 'arn:aws:sns:me-central-1:517606038493:app/GCM/firebase_uat'
+LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+
+def lambda_handler(event, context):
+    batch_item_failures = []
+    sqs_batch_response = {}
+    sqs_message = event.get("Records")
+    if not sqs_message:
+        return {"batchItemFailures": batch_item_failures}
+
+    for message in sqs_message:
+        process_message(message, batch_item_failures)
+
+    sqs_batch_response["batchItemFailures"] = batch_item_failures
+    return sqs_batch_response
+
+def process_message(message, batch_item_failures):
+    message_id = message["messageId"]
+    message_body = json.loads(message["body"])
+    message_headers = header.update_headers(message_body["headers"], message_body["data"])
+    logger_data = logger.prepare_logger_data(message_headers, message_body["data"])
+    log_message_details(message_headers, message_body["data"], logger_data)
+
+    try:
+        service_orchestrator(message_body["data"], message_headers, logger_data)
+    except Exception as e:
+        logger.error(f'An unexpected error occurred : {e}', **logger_data)
+        batch_item_failures.append({"itemIdentifier": message_id})
+
 def lambda_handler(event,context):
 
         batch_item_failures = []
@@ -83,3 +125,59 @@ def prepare_device_token_details_request(message_data,endpoint):
          message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
          message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint
          ).to_json()
+
+
+-----------------------------
+import pytest
+import json
+from unittest.mock import patch, MagicMock
+
+# Assuming the necessary classes and methods are imported correctly as the original code has commented out imports.
+
+@pytest.mark.parametrize("event, expected_response, test_id", [
+    # Test ID: 1 - Happy path with a single message that processes successfully
+    ({
+        "Records": [
+            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "123", "token": "abc"}})}
+        ]
+    }, {"batchItemFailures": []}, "test_id_1"),
+
+    # Test ID: 2 - Happy path with multiple messages, all processed successfully
+    ({
+        "Records": [
+            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "123", "token": "abc"}})},
+            {"messageId": "2", "body": json.dumps({"headers": {}, "data": {"action": "DELETE", "deviceId": "456"}})}
+        ]
+    }, {"batchItemFailures": []}, "test_id_2"),
+
+    # Test ID: 3 - Edge case with empty message list
+    ({
+        "Records": []
+    }, {"batchItemFailures": []}, "test_id_3"),
+
+    # Test ID: 4 - Error case where an exception is thrown during processing
+    ({
+        "Records": [
+            {"messageId": "1", "body": json.dumps({"headers": {}, "data": {"action": "MODIFY", "deviceId": "error", "token": "abc"}})}
+        ]
+    }, {"batchItemFailures": [{"itemIdentifier": "1"}]}, "test_id_4"),
+])
+def test_lambda_handler(event, expected_response, test_id):
+    # Arrange
+    with patch('pbcore.logger.logger') as mock_logger, \
+         patch('pbcore.header.update_headers', return_value={}), \
+         patch('pbcore.logger.prepare_logger_data', return_value={}), \
+         patch('Lambda.service_orchestrator') as mock_orchestrator:
+
+        # Handling the exception case
+        if test_id == "test_id_4":
+            mock_orchestrator.side_effect = Exception("Test Exception")
+
+        # Act
+        response = lambda_handler(event, None)
+
+        # Assert
+        assert response == expected_response
+        mock_logger.info.assert_called()
+        if test_id == "test_id_4":
+            mock_logger.error.assert_called_with('An unexpected error occurred : Test Exception', **{})
