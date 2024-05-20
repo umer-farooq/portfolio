@@ -163,3 +163,76 @@ def python_to_dynamo(python_object: dict) -> dict:
         k: serializer.serialize(v)
         for k, v in python_object.items()
     }
+
+---------------
+def insert_device_details(record):
+    logger.info("Create the Record in DynamoDB")
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    
+    try:
+        response=dynamodb.put_item(TableName = table_name, Item = {
+                    "customer_Id": {'S' : record['customerId']},
+                    "cif": {'S' : record['cif']},
+                    "device_id": {'S' : record['deviceId']},
+                    "device_type": {'S' : record['deviceType']},
+                    "token": {'S' : record['token']},
+                    "platform": {'S' : record['platform']},
+                    "app_version": {'S' : record['appVersion']},
+                    "os_version": {'S' : record['osVersion']},
+                    "make": {'S' : record['make']},
+                    "model": {'S' : record['model']},
+                    "language": {'S' : record['language']},
+                    "endpoint_arn": {'S' : record['endpoint_arn']},
+                    "created_at": {'S' : date_time},
+                    "modfied_at": {'S' : date_time}
+                 })
+        print(f'Insert response:{response}')
+
+    except Exception as e:
+       logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
+
+"""
+Method for update device details
+"""
+
+
+def update_device_details(device_details):
+    print(f'Update information')
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    logger.info(
+        f"New record"
+    )
+    
+    record = python_to_dynamo(json.loads(device_details))
+    logger.info(
+        f"Serialize"
+    )
+    logger.info(
+        f"Updating fields"
+    )
+    try:
+        response = dynamodb.update_item(TableName = table_name,
+            Key={"device_id": record["deviceId"]},
+            AttributeUpdates={"cif": {'Value' : record['cif']},
+                    "customer_id": {'Value' : record['deviceId']},
+                    "device_type": {'Value' : record['deviceType']},
+                    "token": {'Value' : record['token']},
+                    "platform": {'Value' : record['platform']},
+                    "app_version": {'Value' : record['appVersion']},
+                    "os_version": {'Value' : record['osVersion']},
+                    "make": {'Value' : record['make']},
+                    "model": {'Value' : record['model']},
+                    "language": {'Value' : record['language']},
+                    "endpoint_arn": {'Value' : record['endpointArn']},
+                    "modfied_at": {'Value' : {'S' : date_time}}
+            })
+        print(f'Record Updated:{response}')
+    except ClientError as err:
+        logger.error(
+            f"Unable to update device details for deviceId: {record["deviceId"]}"
+        )
+        raise
+    logger.info(f"Updated device details")
+    return response
