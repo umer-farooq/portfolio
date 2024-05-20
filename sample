@@ -236,3 +236,103 @@ def update_device_details(device_details):
         raise
     logger.info(f"Updated device details")
     return response
+
+import json
+
+class DeviceTokenDetails:
+    def __init__(self, customerId, cif, deviceId, deviceType, token, platform, appVersion, osVersion, make, model, language, endpointArn):
+        
+        self.customerId = customerId
+        self.cif = cif
+        self.deviceId = deviceId
+        self.deviceType = deviceType
+        self.token =  token
+        self.platform = platform
+        self.appVersion = appVersion
+        self.osVersion = osVersion
+        self.make = make
+        self.model = model
+        self.language = language
+        self.endpointArn = endpointArn
+
+    # Setters
+    def setCustomerId(self, customerId):
+        self.customerId = customerId
+
+    def setCif(self, cif):
+        self.cif = cif    
+
+    def setDeviceId(self, deviceId):
+        self.deviceId = deviceId    
+
+    def setDeviceType(self, deviceType):
+        self.DeviceType = deviceType
+
+    def setToken(self, token):
+        self.token = token
+
+    def setPlatform(self, platform):
+        self.platform = platform
+
+    def setAppVersion(self, appVersion):
+        self.appVersion = appVersion
+
+    def setOsVersion(self, osVersion):
+        self.osVersion = osVersion    
+
+    def setMake(self, make):
+        self.make = make
+
+    def setModel(self, model):
+        self.model = model
+
+    def setLanguage(self, language):
+        self.language = language    
+
+    def setEndpointArn(self, endpointArn):
+        self.endpointArn = endpointArn
+
+    # Getter
+    def getCustomerId(self):
+        return self.customerId
+
+    def getCif(self):
+        return self.cif    
+
+    def getDeviceId(self):
+        return self.deviceId    
+
+    def getDeviceType(self):
+        return self.DeviceType
+
+    def getToken(self):
+        return self.token
+
+    def getPlatform(self):
+        return self.platform
+
+    def getAppVersion(self):
+        return self.appVersion
+
+    def getOsVersion(self):
+        return self.osVersion    
+
+    def getMake(self):
+        return self.make
+
+    def getModel(self):
+        return self.model
+
+    def getLanguage(self):
+        return self.language    
+
+    def getEndpointArn(self):
+        return self.endpointArn
+
+    def to_json(self):
+        print("I am here")
+        return json.dumps(self, default=lambda o: o.__dict__, indent=4)
+
+ response = DeviceTokenDetails(
+         message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
+         message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint).to_json()
