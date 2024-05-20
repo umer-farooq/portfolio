@@ -19,120 +19,136 @@ table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
 
 dynamodb = boto3.client('dynamodb')
 
-"""
-Fetches a database record by the provided device ID.
+import boto3
+import pbcore.logger as logger
+from datetime import datetime
+import service.PropertyUtil as propertyutil
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+import os
+from pbcore.aws.parameterstore import get_lambda_ssm_param_value
+import service.PropertyUtil as property_util
+import json
+from boto3.dynamodb.types import TypeDeserializer
+from boto3.dynamodb.types import TypeSerializer
 
-Args:
-- deviceId: The ID of the device to fetch from the database.
+LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
-Returns:
-- dict: The database record corresponding to the device ID if found, or None if an error occurs.
+
+table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
+
+
+dynamodb = boto3.client('dynamodb')
+
 """
+Method for fetch by deviceId
+"""
+
 def fetch_by_deviceId(deviceId):
     try:
         response = dynamodb.get_item(
-            TableName=table_name,
+            TableName = table_name,
             Key={"device_id": {"S": deviceId}}
         )
-        return response["Item"]
+        item = response["Item"]
+        print(f"Device Details")
+        return dynamo_to_python(item)
     except Exception as err:
-        print(f"Fetch record error: {err}")
+        logger.error(f"fetch record error {err}")
+
 """
-Deletes a database record based on the provided device ID.
-
-Args:
-- deviceId: The ID of the device whose record needs to be deleted.
-
-Returns:
-- dict: The response from the deletion operation.
+Method for delete by deviceId
 """
 def delete_by_deviceId(deviceId):
     try:
-        return dynamodb.delete_item(
-            TableName=table_name, Key={"device_id": {"S": deviceId}}
+        response = dynamodb.delete_item(TableName=table_name,
+            Key={"device_id": {"S": deviceId}}
         )
+        logger.info(f"Database record {response}")
+        item=response
+        return item
     except Exception as err:
-        print(f"Delete record error: {err}")
+        logger.error(f"delete record error {err}")
+
 
 
 """
-Inserts device details into a DynamoDB table.
-
-Args:
-- record: A dictionary containing the device details to be inserted.
-
-Returns:
-- dict: The response from the insertion operation.
+Method for save record in dynamo db
 """
+
+
 def insert_device_details(record):
-    date_time = get_current_datetime()
+    logger.info("Create the Record in DynamoDB")
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    
     try:
-        return dynamodb.put_item(
-            TableName=table_name,
-            Item={
-                "customer_Id": {'S': record['customerId']},
-                "cif": {'S': record['cif']},
-                "device_id": {'S': record['deviceId']},
-                "device_type": {'S': record['deviceType']},
-                "token": {'S': record['token']},
-                "platform": {'S': record['platform']},
-                "app_version": {'S': record['appVersion']},
-                "os_version": {'S': record['osVersion']},
-                "make": {'S': record['make']},
-                "model": {'S': record['model']},
-                "language": {'S': record['language']},
-                "created_at": {'S': date_time},
-                "modfied_at": {'S': date_time}
-            }
-        )
+        response=dynamodb.put_item(TableName = table_name, Item = {
+                    "customer_Id": {'S' : record['customerId']},
+                    "cif": {'S' : record['cif']},
+                    "device_id": {'S' : record['deviceId']},
+                    "device_type": {'S' : record['deviceType']},
+                    "token": {'S' : record['token']},
+                    "platform": {'S' : record['platform']},
+                    "app_version": {'S' : record['appVersion']},
+                    "os_version": {'S' : record['osVersion']},
+                    "make": {'S' : record['make']},
+                    "model": {'S' : record['model']},
+                    "language": {'S' : record['language']},
+                    "endpoint_arn": {'S' : record['endpoint_arn']},
+                    "created_at": {'S' : date_time},
+                    "modfied_at": {'S' : date_time}
+                 })
+        print(f'Insert response:{response}')
+
     except Exception as e:
-        print(f'Insert error: {e}')
+       logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
 
 """
-Updates device details in a DynamoDB table based on the provided record.
-
-Args:
-- record: A dictionary containing the updated device details.
-
-Returns:
-- dict: The response from the update operation.
+Method for update device details
 """
-def update_device_details(record):
-    date_time = get_current_datetime()
+
+
+def update_device_details(device_details):
+    print(f'Update information')
+    now = datetime.now()
+    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
+    logger.info(
+        f"New record"
+    )
+    
+    record = python_to_dynamo(json.loads(device_details))
+    logger.info(
+        f"Serialize"
+    )
+    logger.info(
+        f"Updating fields"
+    )
     try:
-        return dynamodb.update_item(
-            TableName=table_name,
-            Key={"device_id": {'S': record["deviceId"]}},
-            UpdateExpression="SET cif = :cif, customer_id = :customer_id, device_type = :device_type, "
-                             "token = :token, platform = :platform, app_version = :app_version, "
-                             "os_version = :os_version, make = :make, model = :model, "
-                             "language = :language, modfied_at = :modfied_at",
-            ExpressionAttributeValues={
-                ':cif': {'S': record['cif']},
-                ':customer_id': {'S': record['customerId']},
-                ':device_type': {'S': record['deviceType']},
-                ':token': {'S': record['token']},
-                ':platform': {'S': record['platform']},
-                ':app_version': {'S': record['appVersion']},
-                ':os_version': {'S': record['osVersion']},
-                ':make': {'S': record['make']},
-                ':model': {'S': record['model']},
-                ':language': {'S': record['language']},
-                ':modfied_at': {'S': date_time}
-            }
+        response = dynamodb.update_item(TableName = table_name,
+            Key={"device_id": record["deviceId"]},
+            AttributeUpdates={"cif": {'Value' : record['cif']},
+                    "customer_id": {'Value' : record['deviceId']},
+                    "device_type": {'Value' : record['deviceType']},
+                    "token": {'Value' : record['token']},
+                    "platform": {'Value' : record['platform']},
+                    "app_version": {'Value' : record['appVersion']},
+                    "os_version": {'Value' : record['osVersion']},
+                    "make": {'Value' : record['make']},
+                    "model": {'Value' : record['model']},
+                    "language": {'Value' : record['language']},
+                    "endpoint_arn": {'Value' : record['endpointArn']},
+                    "modfied_at": {'Value' : {'S' : date_time}}
+            })
+        print(f'Record Updated:{response}')
+    except ClientError as err:
+        logger.error(
+            f"Unable to update device details for deviceId: {record["deviceId"]}"
         )
-    except Exception as err:
-        print(f'Update error: {err}')
-
-"""
-Converts a DynamoDB object to a Python dictionary by deserializing the DynamoDB types.
-
-Args:
-- dynamo_object: A dictionary representing a DynamoDB object to be converted.
-
-Returns:
-- dict: A Python dictionary with DynamoDB types deserialized to their Python equivalents.
-"""    
+        raise
+    logger.info(f"Updated device details")
+    return response
+    
 def dynamo_to_python(dynamo_object: dict) -> dict:
     deserializer = TypeDeserializer()
     return {
@@ -140,27 +156,9 @@ def dynamo_to_python(dynamo_object: dict) -> dict:
         for k, v in dynamo_object.items()
     }
 
-"""
-Fetches a database record by the provided device ID.
-
-Args:
-- deviceId: The ID of the device to fetch from the database.
-
-Returns:
-- dict: The database record corresponding to the device ID if found, or None if an error occurs.
-"""
 def python_to_dynamo(python_object: dict) -> dict:
     serializer = TypeSerializer()
     return {
         k: serializer.serialize(v)
         for k, v in python_object.items()
     }
-
-"""
-Returns the current date and time in the format "%y-%m-%d, %H:%M:%S".
-
-Returns:
-- str: The current date and time formatted as a string.
-"""
-def get_current_datetime():
-    return datetime.now().strftime("%y-%m-%d, %H:%M:%S")
