@@ -336,3 +336,5 @@ class DeviceTokenDetails:
  response = DeviceTokenDetails(
          message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
          message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint).to_json()
+
+{'queueName': 'push-notification-token-sync-q-sit', 'action': 'm', 'customerId': '6046097', 'cif': '1005507350', 'deviceId': '12a53c91-d558-440d-a3d1-c9fd869c7112', 'deviceType': 'i', 'token': 'test update token', 'platform': 'android', 'appVersion': 'Uat', 'osVersion': '', 'make': 'samsung', 'model': 'SM-T575', 'language': 'en', 'platformVersion': ''}
