@@ -338,3 +338,27 @@ class DeviceTokenDetails:
          message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint).to_json()
 
 {'queueName': 'push-notification-token-sync-q-sit', 'action': 'm', 'customerId': '6046097', 'cif': '1005507350', 'deviceId': '12a53c91-d558-440d-a3d1-c9fd869c7112', 'deviceType': 'i', 'token': 'test update token', 'platform': 'android', 'appVersion': 'Uat', 'osVersion': '', 'make': 'samsung', 'model': 'SM-T575', 'language': 'en', 'platformVersion': ''}
+
+
+ """
+    Orchestrates actions based on message data.
+    
+    Args:
+        message_data (dict): A dictionary containing message data.
+        message_headers (dict): A dictionary containing message headers.
+        logger_data (dict): A dictionary containing logger data.
+    
+    Returns:
+        None
+ """
+
+"""
+    Prepares a device token details request based on message data and an endpoint.
+
+    Args:
+        message_data (dict): A dictionary containing message data.
+        endpoint (str): The endpoint to include in the request.
+
+    Returns:
+        str: JSON representation of the DeviceTokenDetails object.
+    """
