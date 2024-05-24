@@ -362,3 +362,22 @@ class DeviceTokenDetails:
     Returns:
         str: JSON representation of the DeviceTokenDetails object.
     """
+
+verifyPayment
+confirmPayment
+deletePayment
+sendRequestToPay
+retrieveRequestsToPay
+retrieveDetailRequestToPay
+sendRequestToPayQrCode
+retrieveDetailRequestToPayQrCode
+verifyBusinessPayment
+confirmBusinessPayment
+retrievePaymentRequests
+retrieveQrCodePayment
+retrievePaymentDetails
+
+Update 13 endpoints to pass device details and verify the changes - 2.5 days
+Configuare and update setup/enquiry api to retrive list of Purpose of Payment and cache the list of purpose of payment - 1.5 days
+Update 13 APIs to store Purpose of Payment and retrive Purpose of Payment from retrive APIs and pass to send and request money(outwards) 5 days
+Update changes in notification service (Inward requests from Anni) - 3 days 
