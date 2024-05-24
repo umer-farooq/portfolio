@@ -363,6 +363,12 @@ class DeviceTokenDetails:
         str: JSON representation of the DeviceTokenDetails object.
     """
 
+
+
+Task 1: Update 13 Endpoints to Pass Device Details and Verify the Changes - 2.5 Days
+Description:
+
+Identify and Modify API Endpoints: Update each of the 13 API endpoints to include device details in their request and response structures.
 verifyPayment
 confirmPayment
 deletePayment
@@ -376,8 +382,79 @@ confirmBusinessPayment
 retrievePaymentRequests
 retrieveQrCodePayment
 retrievePaymentDetails
+Steps:
 
-Update 13 endpoints to pass device details and verify the changes - 2.5 days
-Configuare and update setup/enquiry api to retrive list of Purpose of Payment and cache the list of purpose of payment - 1.5 days
-Update 13 APIs to store Purpose of Payment and retrive Purpose of Payment from retrive APIs and pass to send and request money(outwards) 5 days
-Update changes in notification service (Inward requests from Anni) - 3 days 
+Analysis and Planning: Understand the existing API structure and identify where device details need to be added.
+Code Changes: Implement the changes in the backend code for each API to accept and return device details.
+Testing:
+Unit testing for each API to ensure the changes are correctly implemented.
+Integration testing to ensure the APIs work together as expected.
+Verification: Verify that the device details are correctly passed and stored in the system.
+Effort:
+
+Analysis and planning: 0.5 days
+Code changes for 13 APIs: 1 day
+Testing and verification: 1 day
+=================================
+
+
+Task 2: Configure and Update Setup/Enquiry API to Retrieve List of Purpose of Payment and Cache the List - 1.5 Days
+Description:
+
+Setup/Enquiry API Changes: Modify the setup/enquiry API to retrieve the list of purposes of payment from a backend service or database.
+Caching Mechanism: Implement a caching mechanism to store the retrieved list for quicker access and reduced backend calls.
+Steps:
+
+Analysis and Planning: Understand the source and structure of the purposes of payment data.
+Code Changes: Implement changes in the setup/enquiry API to fetch and return the list of purposes of payment.
+Implement Caching:
+Choose an appropriate caching strategy (e.g., in-memory, Redis).
+Code changes to store and retrieve the list from the cache.
+Testing:
+Unit testing for the API changes.
+Performance testing to ensure caching is effective.
+Effort:
+
+Analysis and planning: 0.5 days
+Code changes: 0.5 days
+Testing: 0.5 days
+
+=====================================================
+Task 3: Update 13 APIs to Store and Retrieve Purpose of Payment and Pass to Send and Request Money (Outwards) - 5 Days
+Description:
+
+Add Purpose of Payment: Update each of the 13 APIs to store the purpose of payment information and retrieve it when necessary.
+Integration with Send/Request Money: Ensure that the purpose of payment is correctly passed to send and request money (outwards) functionalities.
+Steps:
+
+Analysis and Planning: Understand where and how the purpose of payment data needs to be integrated into the existing APIs.
+Code Changes: Implement the necessary modifications in the 13 APIs.
+Data Storage: Ensure the purpose of payment is stored in the database.
+Integration: Update the send and request money (outwards) functionalities to utilize the purpose of payment data.
+Testing:
+Unit testing for individual API changes.
+Integration testing to ensure the purpose of payment is correctly passed and utilized.
+Effort:
+
+Analysis and planning: 1 day
+Code changes for 13 APIs: 2 days
+Integration and data storage changes: 1 day
+Testing: 1 day
+===================================================
+Task 4: Update Changes in Notification Service (Inward Requests from Anni) - 3 Days
+Description:
+
+Notification Service Changes: Update the notification service to handle inward requests from Anni. This includes processing the requests and generating appropriate notifications.
+Integration Testing: Ensure the changes are correctly integrated with the existing system and notifications are sent/received as expected.
+Steps:
+
+Analysis and Planning: Understand the notification requirements and the structure of inward requests from Anni.
+Code Changes: Modify the notification service to handle and process the new types of requests.
+Testing:
+Unit testing for the modified notification service.
+Integration testing to ensure proper functioning within the entire system.
+Effort:
+
+Analysis and planning: 0.5 days
+Code changes: 1.5 days
+Testing: 1 day
