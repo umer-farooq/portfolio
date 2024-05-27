@@ -488,3 +488,41 @@ BNK("AE0010001", "Conventional"),
 	ISL("AE0010007", "Islamic"),  
 	ISB("AE0010004", "Islamic"), 
 	B60("AE0010600","Islamic"), 
+
+
+CustomerSF Class:
+
+Calls fetchCustomerPosition.
+fetchCustomerPosition Method:
+
+Fetches customer position data from an external service.
+enrichCustomerPositionResponse Method:
+
+Fetches customer products and passes both to prepareAcctLoanDeposits.
+prepareAcctLoanDeposits Method:
+
+Calls getLoanData and passes customer position service response.
+getLoanData Method:
+getAccountAndDepositData
+
+Populates loan.companyName and loan.companyCode from the customer position service response.
+Populates account.companyName and account.companyCode from the customer position service response.
+
+
+Update FetchCustomerPositionResponse Model
+The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
+
+
+
+SELECT 
+    LOOKUP_CODE1 AS BIN, 
+    LOOKUP_CODE2 AS COMPANY 
+FROM 
+    APPS.LOOKUP_DETAIL_APPS 
+WHERE 
+    LOOKUP_ID = 3 
+    AND SUBSTRING(Credit_Card, 1, 6) = BIN 
+ORDER BY 
+    LOOKUP_CODE2;
+	
+and cache the response the key should be first six digits of the card no	
