@@ -526,3 +526,7 @@ ORDER BY
     LOOKUP_CODE2;
 	
 and cache the response the key should be first six digits of the card no	
+
+
+Update FetchCustomerPositionResponse Model
+The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
