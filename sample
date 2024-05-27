@@ -480,5 +480,11 @@ CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepare
 CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getAccountAndDepositData
 
 
+
 FetchLoanDetailResponse add company and companycode
 LoanSF -> fetchLoanDetails -> GetLoanArrangementResponse -> accountingUnitIdentifier
+
+BNK("AE0010001", "Conventional"), 
+	ISL("AE0010007", "Islamic"),  
+	ISB("AE0010004", "Islamic"), 
+	B60("AE0010600","Islamic"), 
