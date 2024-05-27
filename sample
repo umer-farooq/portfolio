@@ -458,45 +458,14 @@ Effort:
 
 from enum import Enum
 
-# Step 1: Define the Enum class
-class Colors(Enum):
-    RED = 1
-    GREEN = 2
-    BLUE = 3
-    YELLOW = 4
-
-# Step 2: Write the function to find an item in the enum list
-def find_enum_item(enum_class, search_value):
-    """
-    Function to find the item in the enum list.
-    
-    Parameters:
-    enum_class (Enum): The enum class to search within.
-    search_value (str or int): The value or name to search for.
-    
-    Returns:
-    Enum item if found, else None.
-    """
-    # Search by value
-    if isinstance(search_value, int):
-        for item in enum_class:
-            if item.value == search_value:
-                return item
-    # Search by name
-    elif isinstance(search_value, str):
-        try:
-            return enum_class[search_value]
-        except KeyError:
-            pass
-    return None
-
-# Testing the function
-color_by_value = find_enum_item(Colors, 2)
-color_by_name = find_enum_item(Colors, 'BLUE')
-
-print(color_by_value)  # Output: Colors.GREEN
-print(color_by_name)   # Output: Colors.BLUE
 
 Analysis and planning: 0.5 days
 Code changes: 1.5 days
 Testing: 1 day
+
+CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getLoanData
+CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getAccountAndDepositData
+
+
+FetchLoanDetailResponse add company and companycode
+LoanSF -> fetchLoanDetails -> GetLoanArrangementResponse -> accountingUnitIdentifier
