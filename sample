@@ -463,6 +463,19 @@ Analysis and planning: 0.5 days
 Code changes: 1.5 days
 Testing: 1 day
 
+FetchCustomerPositionResponse -> CustomerProducts -> 
+	private List<Account> accounts;
+	private List<Loan> loans;
+	private List<Card> cards;
+
+// Credit Cards
+		prepareCreditCards(custPosition, customerFavouriteProducts, customerProducts, featurePromotion, userPreferences, renewalCardActivation);
+        card = getCardData(cardDetail);
+        SELECT LOOKUP_CODE1 AS BIN, LOOKUP_CODE2 AS COMPANY FROM APPS.LOOKUP_DETAIL_APPS WHERE LOOKUP_ID = 3 ORDER BY LOOKUP_CODE2;
+
+		// Accounts
+		prepareAcctLoanDeposits(custPosition, customerFavouriteProducts, customerProducts, featurePromotion, userPreferences);
+
 CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getLoanData
 CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getAccountAndDepositData
 
