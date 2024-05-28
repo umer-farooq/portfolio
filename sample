@@ -530,27 +530,27 @@ and cache the response the key should be first six digits of the card no
 import boto3
 from botocore.config import Config
 
-import requests
-
-proxies = {
-    'http': 'http://your_proxy_server:port',
-    'https': 'http://your_proxy_server:port',
-}
-
-try:
-    response = requests.get('https://example.com', proxies=proxies)
-    print(response.text)
-except requests.exceptions.ProxyError as e:
-    print(f"Proxy Error: {e}")
-except requests.exceptions.SSLError as e:
-    print(f"SSL Error: {e}")
+import boto3
+from boto3.dynamodb.conditions import Key, Attr
+from botocore.config import Config
 
 proxy_config = Config(
     proxies={
-        'http': 'http://your_proxy_server:port',
-        'https': 'http://your_proxy_server:port',
+        'http': 'http://o22665:Halo316123@myproxy.bankfab.com:8080',
+        'https': 'https://o22665:Halo316123@myproxy.bankfab.com:8080',
     }
 )
+
+dynamodb = boto3.resource('dynamodb',config=proxy_config)
+print(dynamodb)
+table = dynamodb.Table('test_dynamo_test')
+print(table)
+response = table.query(
+    KeyConditionExpression=Key('key').eq('name')
+)
+print(response)
+items = response['Items']
+print(items)
 
 Update FetchCustomerPositionResponse Model
 The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
