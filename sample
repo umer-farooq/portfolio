@@ -530,15 +530,20 @@ and cache the response the key should be first six digits of the card no
 import boto3
 from botocore.config import Config
 
-# Bypass SSL verification (not recommended for production)
-config = Config(
-    retries = {
-        'max_attempts': 10,
-        'mode': 'standard'
-    },
-    ssl_verify=False  # Disable SSL verification
-)
+import requests
 
+proxies = {
+    'http': 'http://your_proxy_server:port',
+    'https': 'http://your_proxy_server:port',
+}
+
+try:
+    response = requests.get('https://example.com', proxies=proxies)
+    print(response.text)
+except requests.exceptions.ProxyError as e:
+    print(f"Proxy Error: {e}")
+except requests.exceptions.SSLError as e:
+    print(f"SSL Error: {e}")
 
 Update FetchCustomerPositionResponse Model
 The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
