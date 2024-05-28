@@ -545,5 +545,12 @@ except requests.exceptions.ProxyError as e:
 except requests.exceptions.SSLError as e:
     print(f"SSL Error: {e}")
 
+proxy_config = Config(
+    proxies={
+        'http': 'http://your_proxy_server:port',
+        'https': 'http://your_proxy_server:port',
+    }
+)
+
 Update FetchCustomerPositionResponse Model
 The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
