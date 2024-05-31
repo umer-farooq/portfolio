@@ -554,3 +554,5 @@ print(items)
 
 Update FetchCustomerPositionResponse Model
 The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
+
+FTWITHINUAE_CRON_EXP=0 20 8-20 * * ?
