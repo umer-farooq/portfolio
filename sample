@@ -1,263 +1,56 @@
-"Add Product content to Sitecore
+Detailed Breakdown for Stakeholders with Justifications
+Product Content Configuration:
 
-Expose API from Sitecore to send the product details"
-"Get product data from Sitecore API.
+Integration with Sitecore API:
+Task: Develop robust API clients and handle authentication, data retrieval, and error handling.
+Justification: Integrating with the Sitecore API is essential to ensure real-time updates and accurate product information on the website. Robust error handling and authentication are necessary to maintain data integrity and security.
+Estimation: 2 weeks
+Database Design:
+Task: Create a database schema to efficiently store and query product details.
+Justification: A well-designed database schema ensures that product data is stored efficiently and can be retrieved quickly, which is crucial for performance and scalability.
+Estimation: 1 week
+API Development:
+Task: Build scalable REST APIs to serve the product content to the frontend applications.
+Justification: Exposing product details through a REST API allows for decoupling the backend and frontend, making the system more modular and easier to maintain. It also facilitates integration with other systems or future enhancements.
+Estimation: 2 weeks
+UI/UX - Capture User Data:
 
-Insurance Microservices will consume Sitecore APIs and data via existing  endpoint
+Content Configuration:
+Task: Set up configurations for content delivery, ensuring it is responsive to user inputs and preferences.
+Justification: Dynamic content delivery enhances user experience by providing personalized information based on user inputs, which can increase user engagement and satisfaction.
+Estimation: 1 week
+Data Capture Endpoints:
+Task: Develop backend endpoints to securely capture and store user data.
+Justification: Capturing user data accurately and securely is crucial for compliance with data protection regulations and for personalizing user experience. Ensuring secure data handling prevents potential data breaches.
+Estimation: 2 weeks
+Validation and Processing:
+Task: Implement server-side validation to ensure data integrity and security.
+Justification: Validating data on the server-side helps prevent invalid or malicious data from entering the system, thus protecting the application from potential attacks and ensuring data quality.
+Estimation: 1 week
+Quote Functionality:
 
-Mobile App to consume the data from newly created Insurance Microservices
+Service Integration:
+Task: Develop service layer to communicate with insurance microservices.
+Justification: Integrating with external microservices allows for leveraging existing functionalities and data from insurance providers, which can reduce development time and improve reliability.
+Estimation: 3 weeks
+Quote Logic Enhancement:
+Task: Update existing quote creation logic to handle new insurance options.
+Justification: Enhancing the quote functionality to include additional insurance options provides users with more choices, potentially increasing conversion rates and customer satisfaction.
+Estimation: 2 weeks
+Testing and Validation:
+Task: Perform extensive testing to ensure the new quote functionality works seamlessly with existing systems.
+Justification: Thorough testing is essential to identify and fix bugs, ensuring that the new features work correctly and do not introduce any regressions. This helps maintain system stability and reliability.
+Estimation: 2 weeks
 
-"
-"Get product data from Sitecore API.
-
-Insurance Microservices will consume Sitecore APIs and data via newly created endpoint
-"
-"Configure and return Live Life contents
-
-Capture user name
-Capture user DOB
-Capture Health Information
-Capture coverage amount 
-Capture years of coverage
-Show preferences for monthly and yearly coverage
-Display Addons"
-"Make call to Insurance Microservices with customer information
-Make a call to Live Life Insurance MS
-Live Life Insurance MS calls quote API  from Metlife.
-Once the quote is received , the details are sent to UI page for customers to see"
-"Modify the create quote functionality  to include 2 values - insurance type = Live Life and insurnaceProvider as Metlife
-
-In InsuranceV2SF, createQuoteDetails will use these parameters to redirect the traffic to Live Life MSA
-
-"
-Configure API Gateway to route traffic to Live Life  MS
-Live Life MS takes the request , make transformations if required and make call to Metlife quote APIS
-Expose Metlife Provided APIs for generating quote
-Metlife to expose new APIS for quote
-"Show user the quote details
-
-Allow users to add payment method  of their choice - account 
-
-Allow users to make payment
-
-Show payment success/payment error screen"
-"Enhance the policy payment API by adding 2 params
-product = live life and provider = Metlife type=account and account details.
-For succeesful payment call issue policy. For Failure show error message.
-
-Perform validation like if there are any posting restrictions or not, sufficient balance is there, dormant or not ."
-Configure endpoint to move traffic to Live Life MS with payment status. On payment status Success, policy will be issued
-Call issuePolicy to get policy for successful payment
-"Expose MSA URL for Payment
-Issue policy from Metlife "
-Call T24 to make account payment
-Make the necessary payment
-"Show user the quote details
-
-Allow users to add payment method  of their choice - credit card
-
-Allow users to make payment
-
-Show payment success/payment error screen"
-"Enhance the policy payment API by adding 2 params
-product = live life and provider = Metlife type=account and account details.
-For successful payment call issue policy. For Failure show error message
-
-Before payment validation needs to be done to check if the card is not blocked"
-Configure endpoint to direct traffic to Live Life MS to issue policy
-Create endpoint in Live Life to issue policy
-"Expose MSA URL for Payment/Reversal via card
-
-Expose URL to call policy issuance"
-Modifications in existing payments API to handle purchase and reversal.
-New APIs to be provided from Fiserv for payments and reversals
-"User submits all the details.
-
-Post purchase successful policy is issued 
-"
-"Enhance policy details endpoint and pass type= Live Life and provider =  Metlife
-
-In turn it will call policydetails of insuranceserviceSF v2 and pass parameters . This method in turn will call endpoints to get the Metlife policy details from Live Life policy issuance
-"
-Configure policy issuance url to point to Live Life MS
-"Create a new Live Life endpoint.
-
-The endpoint will connect to Metlife services and get the policy details"
-"Create a policy retry batch which will read all instance of failed policy issuance / payment failure and retry 
-
-
-
-
-"
-Configure policy issuance and enquiry url
-Expose policy issuance and policy enquiry urls
-"On success screen provide download button for customer to download certifcate
-
-On click on Download button, call Metlifes Download Policy api to get the existing policy documents"
-Modify existing policy document to sendpolicy url and policy number
-Expose policy download url which will point to Live Life MS
-Expose policy download url which will call Metlife download url. The api will send base 64 value file
-Expose Url for policy download in Kong
-Create API in Metlife for policy document download
-"Build a automated process to fetch the policies which are due for premium payment and perform the account validation
-
-Get the  premium details
-Call the MSA fund transfer API
-Call the insurance provider premium payment API
-
-if account is not valid, set communication to the customer
-
-In case of any technical error, we will reverse the payment"
-Expose premium payment url 
-For successful payment send the update to Metlife to update their record
-"Configure premium payment endpoints
-
-Configure updatePremium Payment"
-API for paying premiums
-API for paying premiums
-Configure updatePremium Payment
-"Build a automated process to fetch the policies for which premium is due and perform the card validation
-
-Get the premium details
-Call the MSA cardAuthorise
-Call the insurance provider premium payment API
-
-if card is not valid, set communication to the customer
-
-In case of any technical error, we will reverse the payment"
-"Configure updatePremiumPaymentStatus endpoints  to point to LiveLife MS 
-
-"
-"UpdatePremiumPaymentStatus is an endpoint to call Metlife API and Update status
-
-"
-Modify MSA APIS
-New APIs to e provided for purchase  reversal
-Expose Api to update premium status
-"Create a service which will fetch records for all the failed policy payments, premium payments
-
-Retry Payment by calling payment services
-
-Post successful payment, call policy issuance APIs
-
-
-
-
-"
-Configure policy issuance and enquiry url
-Issue policy and process failed payments for premium  and policy issuance
-Issue policy and process failed payments from accounts for premium  and policy issuance
-Issue policy and process failed payments from accounts for premium  and policy issuance
-"Update insurance details and validity
-"
-"Shown on screen the status of the policy
-
-viewAllPolicies will give detail of the policies 
-"
-Provide an API to fetch policy status from Metlife 
-Expose URL to route request to Live Life MS
-Provide an API to fetch policy status from Metlife 
-Provide an API to fetch policy status from Metlife 
-Provide an endpoint to provide policy status
-"Shown on screen the status of the policy
- viewAllPolicies will give detail of the policies 
-"
-Provide an API to fetch policy status from Metlife 
-Expose URL to route request to Live Life MS
-Provide an API to fetch policy status from Metlife 
-Provide an endpoint to provide policy status
-Provide an endpoint to provide policy status
-Recevie and display different notifications
-"Leverage existing microservices endpoints for processing notification:
-1) policy issue
-2) premium payment success / failure"
-Expose notification endpoints
-Trigger notification on : successful policy issuance and successful/failure of insurance payments
-"Create tables to capture:
-
-1) Insurance details
-2) Policy Details
-3) Premium Details
-4) User details"
-Metlife to onboard FAB and share client id and secret
-"Create VPN connection
-Open Ports
-Whitelist Ips"
----------------------------------
-
-
-Live Life - product content configuration  
-Live Life - product content configuration  
-Live Life - product content configuration  
-Live Life  page UI UX - Capture user data
-Live Life : Quote Functionality
-Live Life : Quote Functionality
-Live Life : Quote Functionality
-Live Life : Quote Functionality
-Live Life : Quote Functionality
-Live Life : Quote Functionality
-Live Life : Policy Purchase  Functionality with Account : UI UX
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Account
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Purchase  Functionality with Credit Card
-Live Life : Policy Issuance
-Live Life : Policy Issuance
-Live Life : Policy Issuance
-Live Life : Policy Issuance
-Live Life : Policy Issuance - Retry
-Live Life : Policy Issuance - Retry
-Live Life : Policy Issuance - Retry
-Live Life - Policy Certificate Download
-Live Life - Policy Certificate Download
-Live Life - Policy Certificate Download
-Live Life - Policy Certificate Download
-Live Life - Policy Certificate Download
-Live Life - Policy Certificate Download
-Live Life : Premium Payment  Functionality with Account
-Live Life : Premium Payment  Functionality with Account
-Live Life : Premium Payment  Functionality with Account
-Live Life :Premium Payment Functionality with Account
-Live Life : Premium Payment  Functionality with Account
-Live Life : Premium Payment  Functionality with Account
-Live Life : Premium Payment  Functionality with Account
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Premium Payment  Functionality with Credit Card
-Live Life : Policy Premium Payment - Retry
-Live Life : Policy Premium Payment - Retry
-Live Life : Policy Purchase/Premium Payment - Retry
-Live Life : Policy Purchase/Premium Payment - Retry
-Live Life : Policy Purchase/Premium Payment - Retry
-Live Life : Policy Purchase/Premium Payment - Retry
-Live Life : Policy status
-Live Life : Policy status
-Live Life : Policy status
-Live Life : Policy status
-Live Life : Policy status
-Live Life : Policy status
-Live Life : Manage Policy
-Live Life : Manage Policy
-Live Life : Manage Policy
-Live Life : Manage Policy
-Live Life : Manage Policy
-Live Life : Manage Policy
-Notification
-Notification
-Notification
-Notification
-Database
-Onboard IDP
-Set up infrastucture
+Summary with Justifications
+Total Duration: Approximately 13 weeks
+Resources: Depending on the team size and expertise, parallel task execution might reduce the overall time.
+Justifications:
+Integration Tasks: Necessary for ensuring that the backend can communicate effectively with external systems and provide real-time, accurate data to the frontend.
+Database Design: Critical for performance, scalability, and efficient data retrieval.
+API Development: Facilitates modularity, maintainability, and potential future integrations.
+Content Configuration: Enhances user experience through personalized content delivery.
+Data Capture and Validation: Ensures data integrity, compliance with regulations, and security against potential threats.
+Service Integration and Logic Enhancement: Provides users with enhanced functionalities and options, improving overall service offering.
+Testing and Validation: Ensures the reliability and stability of the system, preventing future issues.
+This detailed and justified plan helps stakeholders understand the necessity of each task, the effort involved, and the benefits these tasks bring to the overall project. This understanding is crucial for accurate resource allocation and time estimation.
