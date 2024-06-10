@@ -1,560 +1,263 @@
-import boto3
-import pbcore.logger as logger
-from datetime import datetime
-import service.PropertyUtil as propertyutil
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
-import os
-from pbcore.aws.parameterstore import get_lambda_ssm_param_value
-import service.PropertyUtil as property_util
-import json
-from boto3.dynamodb.types import TypeDeserializer
-from boto3.dynamodb.types import TypeSerializer
-
-LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
-
-
-table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
-
-
-dynamodb = boto3.client('dynamodb')
-
-import boto3
-import pbcore.logger as logger
-from datetime import datetime
-import service.PropertyUtil as propertyutil
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
-import os
-from pbcore.aws.parameterstore import get_lambda_ssm_param_value
-import service.PropertyUtil as property_util
-import json
-from boto3.dynamodb.types import TypeDeserializer
-from boto3.dynamodb.types import TypeSerializer
-
-LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
-
-
-table_name = propertyutil.getValue("ENVIRONMENT") + "_push_notification_token"
-
-
-dynamodb = boto3.client('dynamodb')
-
-"""
-Fetches device details from DynamoDB based on the provided device ID.
-
-Args:
-- deviceId: The ID of the device to fetch details for.
-
-Returns:
-- dict: A dictionary containing the device details fetched from DynamoDB.
-"""
-def fetch_by_deviceId(deviceId):
-    try:
-        response = dynamodb.get_item(
-            TableName=table_name,
-            Key={"device_id": {"S": deviceId}}
-        )
-        item = response["Item"]
-        print("Device Details")
-        return dynamo_to_python(item)
-    except ClientError as err:
-        logger.error(f"fetch record error {err}")
-
-"""
-Deletes a database record based on the provided device ID.
-
-Args:
-- deviceId: The ID of the device whose record needs to be deleted.
-
-Returns:
-- dict: The response from the deletion operation.
-"""
-def delete_by_deviceId(deviceId):
-    try:
-        return dynamodb.delete_item(TableName=table_name, Key={"device_id": {"S": deviceId}})
-        
-    except ClientError as err:
-        logger.error(f"delete record error {err}")
-
-"""
-Creates a new record in DynamoDB based on the provided record details.
-
-Args:
-- record: A dictionary containing the details of the record to be inserted.
-
-Returns:
-- dict: The response from the DynamoDB `put_item` operation.
-"""
-def insert_device_details(record):
-    logger.info("Create the Record in DynamoDB")
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    try:
-        item = {key: {'S': str(value)} for key, value in record.items()} | {
-            "created_at": {'S': date_time},
-            "modified_at": {'S': date_time},
-        }
-        response = dynamodb.put_item(TableName=table_name, Item=item)
-        print(f'Insert response: {response}')
-
-    except Exception as e:
-        logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
-
-"""
-Updates device details in DynamoDB based on the provided device details.
-
-Args:
-- device_details: A JSON string containing the device details to be updated.
-
-Returns:
-- dict: The response from the update operation in DynamoDB.
-"""
-def update_device_details(device_details):
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    logger.info(f"Starting update process at {date_time}")
-
-    record = python_to_dynamo(json.loads(device_details))
-    attribute_updates = {key: {'Value': value} for key, value in record.items() if key != 'deviceId'}
-    attribute_updates['modfied_at'] = {'Value': {'S': date_time}}
-
-    try:
-        response = dynamodb.update_item(
-            TableName=table_name,
-            Key={"device_id": record["deviceId"]},
-            AttributeUpdates=attribute_updates
-        )
-        print(f'Record Updated:{response}')
-    except ClientError as err:
-        logger.error(f"Unable to update device details for deviceId: {record['deviceId']} - {err}")
-        raise
-    logger.info("Updated device details successfully")
-    return response
- 
-"""
-Converts a DynamoDB object to a Python dictionary.
-
-Args:
-- dynamo_object: A DynamoDB object to be converted to a Python dictionary.
-
-Returns:
-- dict: The Python dictionary after deserialization.
-"""
-def dynamo_to_python(dynamo_object: dict) -> dict:
-    deserializer = TypeDeserializer()
-    return {
-        k: deserializer.deserialize(v)
-        for k, v in dynamo_object.items()
-    }
-
-"""
-Converts a Python dictionary to a DynamoDB object.
-
-Args:
-- python_object: A Python dictionary to be converted to a DynamoDB object.
-
-Returns:
-- dict: The DynamoDB object after serialization.
-"""
-def python_to_dynamo(python_object: dict) -> dict:
-    serializer = TypeSerializer()
-    return {
-        k: serializer.serialize(v)
-        for k, v in python_object.items()
-    }
-
----------------
-def insert_device_details(record):
-    logger.info("Create the Record in DynamoDB")
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    
-    try:
-        response=dynamodb.put_item(TableName = table_name, Item = {
-                    "customer_Id": {'S' : record['customerId']},
-                    "cif": {'S' : record['cif']},
-                    "device_id": {'S' : record['deviceId']},
-                    "device_type": {'S' : record['deviceType']},
-                    "token": {'S' : record['token']},
-                    "platform": {'S' : record['platform']},
-                    "app_version": {'S' : record['appVersion']},
-                    "os_version": {'S' : record['osVersion']},
-                    "make": {'S' : record['make']},
-                    "model": {'S' : record['model']},
-                    "language": {'S' : record['language']},
-                    "endpoint_arn": {'S' : record['endpoint_arn']},
-                    "created_at": {'S' : date_time},
-                    "modfied_at": {'S' : date_time}
-                 })
-        print(f'Insert response:{response}')
-
-    except Exception as e:
-       logger.error(f'An unexpected error occurred :: create_or_update_record : {e}')
-
-"""
-Method for update device details
-"""
-
-
-def update_device_details(device_details):
-    print(f'Update information')
-    now = datetime.now()
-    date_time = now.strftime("%y-%m-%d, %H:%M:%S")
-    logger.info(
-        f"New record"
-    )
-    
-    record = python_to_dynamo(json.loads(device_details))
-    logger.info(
-        f"Serialize"
-    )
-    logger.info(
-        f"Updating fields"
-    )
-    try:
-        response = dynamodb.update_item(TableName = table_name,
-            Key={"device_id": record["deviceId"]},
-            AttributeUpdates={"cif": {'Value' : record['cif']},
-                    "customer_id": {'Value' : record['deviceId']},
-                    "device_type": {'Value' : record['deviceType']},
-                    "token": {'Value' : record['token']},
-                    "platform": {'Value' : record['platform']},
-                    "app_version": {'Value' : record['appVersion']},
-                    "os_version": {'Value' : record['osVersion']},
-                    "make": {'Value' : record['make']},
-                    "model": {'Value' : record['model']},
-                    "language": {'Value' : record['language']},
-                    "endpoint_arn": {'Value' : record['endpointArn']},
-                    "modfied_at": {'Value' : {'S' : date_time}}
-            })
-        print(f'Record Updated:{response}')
-    except ClientError as err:
-        logger.error(
-            f"Unable to update device details for deviceId: {record["deviceId"]}"
-        )
-        raise
-    logger.info(f"Updated device details")
-    return response
-
-import json
-
-class DeviceTokenDetails:
-    def __init__(self, customerId, cif, deviceId, deviceType, token, platform, appVersion, osVersion, make, model, language, endpointArn):
-        
-        self.customerId = customerId
-        self.cif = cif
-        self.deviceId = deviceId
-        self.deviceType = deviceType
-        self.token =  token
-        self.platform = platform
-        self.appVersion = appVersion
-        self.osVersion = osVersion
-        self.make = make
-        self.model = model
-        self.language = language
-        self.endpointArn = endpointArn
-
-    # Setters
-    def setCustomerId(self, customerId):
-        self.customerId = customerId
-
-    def setCif(self, cif):
-        self.cif = cif    
-
-    def setDeviceId(self, deviceId):
-        self.deviceId = deviceId    
-
-    def setDeviceType(self, deviceType):
-        self.DeviceType = deviceType
-
-    def setToken(self, token):
-        self.token = token
-
-    def setPlatform(self, platform):
-        self.platform = platform
-
-    def setAppVersion(self, appVersion):
-        self.appVersion = appVersion
-
-    def setOsVersion(self, osVersion):
-        self.osVersion = osVersion    
-
-    def setMake(self, make):
-        self.make = make
-
-    def setModel(self, model):
-        self.model = model
-
-    def setLanguage(self, language):
-        self.language = language    
-
-    def setEndpointArn(self, endpointArn):
-        self.endpointArn = endpointArn
-
-    # Getter
-    def getCustomerId(self):
-        return self.customerId
-
-    def getCif(self):
-        return self.cif    
-
-    def getDeviceId(self):
-        return self.deviceId    
-
-    def getDeviceType(self):
-        return self.DeviceType
-
-    def getToken(self):
-        return self.token
-
-    def getPlatform(self):
-        return self.platform
-
-    def getAppVersion(self):
-        return self.appVersion
-
-    def getOsVersion(self):
-        return self.osVersion    
-
-    def getMake(self):
-        return self.make
-
-    def getModel(self):
-        return self.model
-
-    def getLanguage(self):
-        return self.language    
-
-    def getEndpointArn(self):
-        return self.endpointArn
-
-    def to_json(self):
-        print("I am here")
-        return json.dumps(self, default=lambda o: o.__dict__, indent=4)
-
- response = DeviceTokenDetails(
-         message_data['customerId'],message_data['cif'], message_data['deviceId'], message_data['deviceType'],message_data['token'],message_data['platform'],message_data['appVersion'],
-         message_data['osVersion'],message_data['make'],message_data['model'],message_data['language'],endpoint).to_json()
-
-{'queueName': 'push-notification-token-sync-q-sit', 'action': 'm', 'customerId': '6046097', 'cif': '1005507350', 'deviceId': '12a53c91-d558-440d-a3d1-c9fd869c7112', 'deviceType': 'i', 'token': 'test update token', 'platform': 'android', 'appVersion': 'Uat', 'osVersion': '', 'make': 'samsung', 'model': 'SM-T575', 'language': 'en', 'platformVersion': ''}
-
-
- """
-    Orchestrates actions based on message data.
-    
-    Args:
-        message_data (dict): A dictionary containing message data.
-        message_headers (dict): A dictionary containing message headers.
-        logger_data (dict): A dictionary containing logger data.
-    
-    Returns:
-        None
- """
-
-"""
-    Prepares a device token details request based on message data and an endpoint.
-
-    Args:
-        message_data (dict): A dictionary containing message data.
-        endpoint (str): The endpoint to include in the request.
-
-    Returns:
-        str: JSON representation of the DeviceTokenDetails object.
-    """
-
-
-
-Task 1: Update 13 Endpoints to Pass Device Details and Verify the Changes - 2.5 Days
-Description:
-
-Identify and Modify API Endpoints: Update each of the 13 API endpoints to include device details in their request and response structures.
-verifyPayment
-confirmPayment
-deletePayment
-sendRequestToPay
-retrieveRequestsToPay
-retrieveDetailRequestToPay
-sendRequestToPayQrCode
-retrieveDetailRequestToPayQrCode
-verifyBusinessPayment
-confirmBusinessPayment
-retrievePaymentRequests
-retrieveQrCodePayment
-retrievePaymentDetails
-Steps:
-
-Analysis and Planning: Understand the existing API structure and identify where device details need to be added.
-Code Changes: Implement the changes in the backend code for each API to accept and return device details.
-Testing:
-Unit testing for each API to ensure the changes are correctly implemented.
-Integration testing to ensure the APIs work together as expected.
-Verification: Verify that the device details are correctly passed and stored in the system.
-Effort:
-
-Analysis and planning: 0.5 days
-Code changes for 13 APIs: 1 day
-Testing and verification: 1 day
-=================================
-
-
-Task 2: Configure and Update Setup/Enquiry API to Retrieve List of Purpose of Payment and Cache the List - 1.5 Days
-Description:
-
-Setup/Enquiry API Changes: Modify the setup/enquiry API to retrieve the list of purposes of payment from a backend service or database.
-Caching Mechanism: Implement a caching mechanism to store the retrieved list for quicker access and reduced backend calls.
-Steps:
-
-Analysis and Planning: Understand the source and structure of the purposes of payment data.
-Code Changes: Implement changes in the setup/enquiry API to fetch and return the list of purposes of payment.
-Implement Caching:
-Choose an appropriate caching strategy (e.g., in-memory, Redis).
-Code changes to store and retrieve the list from the cache.
-Testing:
-Unit testing for the API changes.
-Performance testing to ensure caching is effective.
-Effort:
-
-Analysis and planning: 0.5 days
-Code changes: 0.5 days
-Testing: 0.5 days
-
-=====================================================
-Task 3: Update 13 APIs to Store and Retrieve Purpose of Payment and Pass to Send and Request Money (Outwards) - 5 Days
-Description:
-
-Add Purpose of Payment: Update each of the 13 APIs to store the purpose of payment information and retrieve it when necessary.
-Integration with Send/Request Money: Ensure that the purpose of payment is correctly passed to send and request money (outwards) functionalities.
-Steps:
-
-Analysis and Planning: Understand where and how the purpose of payment data needs to be integrated into the existing APIs.
-Code Changes: Implement the necessary modifications in the 13 APIs.
-Data Storage: Ensure the purpose of payment is stored in the database.
-Integration: Update the send and request money (outwards) functionalities to utilize the purpose of payment data.
-Testing:
-Unit testing for individual API changes.
-Integration testing to ensure the purpose of payment is correctly passed and utilized.
-Effort:
-
-Analysis and planning: 1 day
-Code changes for 13 APIs: 2 days
-Integration and data storage changes: 1 day
-Testing: 1 day
-===================================================
-Task 4: Update Changes in Notification Service (Inward Requests from Anni) - 3 Days
-Description:
-
-Notification Service Changes: Update the notification service to handle inward requests from Anni. This includes processing the requests and generating appropriate notifications.
-Integration Testing: Ensure the changes are correctly integrated with the existing system and notifications are sent/received as expected.
-Steps:
-
-Analysis and Planning: Understand the notification requirements and the structure of inward requests from Anni.
-Code Changes: Modify the notification service to handle and process the new types of requests.
-Testing:
-Unit testing for the modified notification service.
-Integration testing to ensure proper functioning within the entire system.
-Effort:
-
-
-from enum import Enum
-
-
-Analysis and planning: 0.5 days
-Code changes: 1.5 days
-Testing: 1 day
-
-FetchCustomerPositionResponse -> CustomerProducts -> 
-	private List<Account> accounts;
-	private List<Loan> loans;
-	private List<Card> cards;
-
-// Credit Cards
-		prepareCreditCards(custPosition, customerFavouriteProducts, customerProducts, featurePromotion, userPreferences, renewalCardActivation);
-        card = getCardData(cardDetail);
-        SELECT LOOKUP_CODE1 AS BIN, LOOKUP_CODE2 AS COMPANY FROM APPS.LOOKUP_DETAIL_APPS WHERE LOOKUP_ID = 3 ORDER BY LOOKUP_CODE2;
-
-		// Accounts
-		prepareAcctLoanDeposits(custPosition, customerFavouriteProducts, customerProducts, featurePromotion, userPreferences);
-
-CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getLoanData
-CustomerSF -> fetchCustomerPosition -> enrichCustomerPositionResponse -> prepareAcctLoanDeposits -> getAccountAndDepositData
-
-
-
-FetchLoanDetailResponse add company and companycode
-LoanSF -> fetchLoanDetails -> GetLoanArrangementResponse -> accountingUnitIdentifier
-
-BNK("AE0010001", "Conventional"), 
-	ISL("AE0010007", "Islamic"),  
-	ISB("AE0010004", "Islamic"), 
-	B60("AE0010600","Islamic"), 
-
-
-CustomerSF Class:
-
-Calls fetchCustomerPosition.
-fetchCustomerPosition Method:
-
-Fetches customer position data from an external service.
-enrichCustomerPositionResponse Method:
-
-Fetches customer products and passes both to prepareAcctLoanDeposits.
-prepareAcctLoanDeposits Method:
-
-Calls getLoanData and passes customer position service response.
-getLoanData Method:
-getAccountAndDepositData
-
-Populates loan.companyName and loan.companyCode from the customer position service response.
-Populates account.companyName and account.companyCode from the customer position service response.
-
-
-Update FetchCustomerPositionResponse Model
-The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
-
-
-
-SELECT 
-    LOOKUP_CODE1 AS BIN, 
-    LOOKUP_CODE2 AS COMPANY 
-FROM 
-    APPS.LOOKUP_DETAIL_APPS 
-WHERE 
-    LOOKUP_ID = 3 
-    AND SUBSTRING(Credit_Card, 1, 6) = BIN 
-ORDER BY 
-    LOOKUP_CODE2;
-	
-and cache the response the key should be first six digits of the card no	
-
-import boto3
-from botocore.config import Config
-
-import boto3
-from boto3.dynamodb.conditions import Key, Attr
-from botocore.config import Config
-
-proxy_config = Config(
-    proxies={
-        'http': 'http://o22665:Halo316123@myproxy.bankfab.com:8080',
-        'https': 'https://o22665:Halo316123@myproxy.bankfab.com:8080',
-    }
-)
-
-dynamodb = boto3.resource('dynamodb',config=proxy_config)
-print(dynamodb)
-table = dynamodb.Table('test_dynamo_test')
-print(table)
-response = table.query(
-    KeyConditionExpression=Key('key').eq('name')
-)
-print(response)
-items = response['Items']
-print(items)
-
-Update FetchCustomerPositionResponse Model
-The FetchCustomerPositionResponse model contains a CustomerProducts object which further contains three objects: Account, Loan, and Card. We need to add two new fields, companyName and companyCode, to each of these three objects.
-
-FTWITHINUAE_CRON_EXP=0 20 8-20 * * ?
-
-At 8:20 AM every hour until 8:20 PM every day.
+"Add Product content to Sitecore
+
+Expose API from Sitecore to send the product details"
+"Get product data from Sitecore API.
+
+Insurance Microservices will consume Sitecore APIs and data via existing  endpoint
+
+Mobile App to consume the data from newly created Insurance Microservices
+
+"
+"Get product data from Sitecore API.
+
+Insurance Microservices will consume Sitecore APIs and data via newly created endpoint
+"
+"Configure and return Live Life contents
+
+Capture user name
+Capture user DOB
+Capture Health Information
+Capture coverage amount 
+Capture years of coverage
+Show preferences for monthly and yearly coverage
+Display Addons"
+"Make call to Insurance Microservices with customer information
+Make a call to Live Life Insurance MS
+Live Life Insurance MS calls quote API  from Metlife.
+Once the quote is received , the details are sent to UI page for customers to see"
+"Modify the create quote functionality  to include 2 values - insurance type = Live Life and insurnaceProvider as Metlife
+
+In InsuranceV2SF, createQuoteDetails will use these parameters to redirect the traffic to Live Life MSA
+
+"
+Configure API Gateway to route traffic to Live Life  MS
+Live Life MS takes the request , make transformations if required and make call to Metlife quote APIS
+Expose Metlife Provided APIs for generating quote
+Metlife to expose new APIS for quote
+"Show user the quote details
+
+Allow users to add payment method  of their choice - account 
+
+Allow users to make payment
+
+Show payment success/payment error screen"
+"Enhance the policy payment API by adding 2 params
+product = live life and provider = Metlife type=account and account details.
+For succeesful payment call issue policy. For Failure show error message.
+
+Perform validation like if there are any posting restrictions or not, sufficient balance is there, dormant or not ."
+Configure endpoint to move traffic to Live Life MS with payment status. On payment status Success, policy will be issued
+Call issuePolicy to get policy for successful payment
+"Expose MSA URL for Payment
+Issue policy from Metlife "
+Call T24 to make account payment
+Make the necessary payment
+"Show user the quote details
+
+Allow users to add payment method  of their choice - credit card
+
+Allow users to make payment
+
+Show payment success/payment error screen"
+"Enhance the policy payment API by adding 2 params
+product = live life and provider = Metlife type=account and account details.
+For successful payment call issue policy. For Failure show error message
+
+Before payment validation needs to be done to check if the card is not blocked"
+Configure endpoint to direct traffic to Live Life MS to issue policy
+Create endpoint in Live Life to issue policy
+"Expose MSA URL for Payment/Reversal via card
+
+Expose URL to call policy issuance"
+Modifications in existing payments API to handle purchase and reversal.
+New APIs to be provided from Fiserv for payments and reversals
+"User submits all the details.
+
+Post purchase successful policy is issued 
+"
+"Enhance policy details endpoint and pass type= Live Life and provider =  Metlife
+
+In turn it will call policydetails of insuranceserviceSF v2 and pass parameters . This method in turn will call endpoints to get the Metlife policy details from Live Life policy issuance
+"
+Configure policy issuance url to point to Live Life MS
+"Create a new Live Life endpoint.
+
+The endpoint will connect to Metlife services and get the policy details"
+"Create a policy retry batch which will read all instance of failed policy issuance / payment failure and retry 
+
+
+
+
+"
+Configure policy issuance and enquiry url
+Expose policy issuance and policy enquiry urls
+"On success screen provide download button for customer to download certifcate
+
+On click on Download button, call Metlifes Download Policy api to get the existing policy documents"
+Modify existing policy document to sendpolicy url and policy number
+Expose policy download url which will point to Live Life MS
+Expose policy download url which will call Metlife download url. The api will send base 64 value file
+Expose Url for policy download in Kong
+Create API in Metlife for policy document download
+"Build a automated process to fetch the policies which are due for premium payment and perform the account validation
+
+Get the  premium details
+Call the MSA fund transfer API
+Call the insurance provider premium payment API
+
+if account is not valid, set communication to the customer
+
+In case of any technical error, we will reverse the payment"
+Expose premium payment url 
+For successful payment send the update to Metlife to update their record
+"Configure premium payment endpoints
+
+Configure updatePremium Payment"
+API for paying premiums
+API for paying premiums
+Configure updatePremium Payment
+"Build a automated process to fetch the policies for which premium is due and perform the card validation
+
+Get the premium details
+Call the MSA cardAuthorise
+Call the insurance provider premium payment API
+
+if card is not valid, set communication to the customer
+
+In case of any technical error, we will reverse the payment"
+"Configure updatePremiumPaymentStatus endpoints  to point to LiveLife MS 
+
+"
+"UpdatePremiumPaymentStatus is an endpoint to call Metlife API and Update status
+
+"
+Modify MSA APIS
+New APIs to e provided for purchase  reversal
+Expose Api to update premium status
+"Create a service which will fetch records for all the failed policy payments, premium payments
+
+Retry Payment by calling payment services
+
+Post successful payment, call policy issuance APIs
+
+
+
+
+"
+Configure policy issuance and enquiry url
+Issue policy and process failed payments for premium  and policy issuance
+Issue policy and process failed payments from accounts for premium  and policy issuance
+Issue policy and process failed payments from accounts for premium  and policy issuance
+"Update insurance details and validity
+"
+"Shown on screen the status of the policy
+
+viewAllPolicies will give detail of the policies 
+"
+Provide an API to fetch policy status from Metlife 
+Expose URL to route request to Live Life MS
+Provide an API to fetch policy status from Metlife 
+Provide an API to fetch policy status from Metlife 
+Provide an endpoint to provide policy status
+"Shown on screen the status of the policy
+ viewAllPolicies will give detail of the policies 
+"
+Provide an API to fetch policy status from Metlife 
+Expose URL to route request to Live Life MS
+Provide an API to fetch policy status from Metlife 
+Provide an endpoint to provide policy status
+Provide an endpoint to provide policy status
+Recevie and display different notifications
+"Leverage existing microservices endpoints for processing notification:
+1) policy issue
+2) premium payment success / failure"
+Expose notification endpoints
+Trigger notification on : successful policy issuance and successful/failure of insurance payments
+"Create tables to capture:
+
+1) Insurance details
+2) Policy Details
+3) Premium Details
+4) User details"
+Metlife to onboard FAB and share client id and secret
+"Create VPN connection
+Open Ports
+Whitelist Ips"
+---------------------------------
+
+
+Live Life - product content configuration  
+Live Life - product content configuration  
+Live Life - product content configuration  
+Live Life  page UI UX - Capture user data
+Live Life : Quote Functionality
+Live Life : Quote Functionality
+Live Life : Quote Functionality
+Live Life : Quote Functionality
+Live Life : Quote Functionality
+Live Life : Quote Functionality
+Live Life : Policy Purchase  Functionality with Account : UI UX
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Account
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Purchase  Functionality with Credit Card
+Live Life : Policy Issuance
+Live Life : Policy Issuance
+Live Life : Policy Issuance
+Live Life : Policy Issuance
+Live Life : Policy Issuance - Retry
+Live Life : Policy Issuance - Retry
+Live Life : Policy Issuance - Retry
+Live Life - Policy Certificate Download
+Live Life - Policy Certificate Download
+Live Life - Policy Certificate Download
+Live Life - Policy Certificate Download
+Live Life - Policy Certificate Download
+Live Life - Policy Certificate Download
+Live Life : Premium Payment  Functionality with Account
+Live Life : Premium Payment  Functionality with Account
+Live Life : Premium Payment  Functionality with Account
+Live Life :Premium Payment Functionality with Account
+Live Life : Premium Payment  Functionality with Account
+Live Life : Premium Payment  Functionality with Account
+Live Life : Premium Payment  Functionality with Account
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Premium Payment  Functionality with Credit Card
+Live Life : Policy Premium Payment - Retry
+Live Life : Policy Premium Payment - Retry
+Live Life : Policy Purchase/Premium Payment - Retry
+Live Life : Policy Purchase/Premium Payment - Retry
+Live Life : Policy Purchase/Premium Payment - Retry
+Live Life : Policy Purchase/Premium Payment - Retry
+Live Life : Policy status
+Live Life : Policy status
+Live Life : Policy status
+Live Life : Policy status
+Live Life : Policy status
+Live Life : Policy status
+Live Life : Manage Policy
+Live Life : Manage Policy
+Live Life : Manage Policy
+Live Life : Manage Policy
+Live Life : Manage Policy
+Live Life : Manage Policy
+Notification
+Notification
+Notification
+Notification
+Database
+Onboard IDP
+Set up infrastucture
