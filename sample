@@ -1,4 +1,5 @@
 0 0 5 * * ?
+ filters records to only include those that have been modified within the past 24 hours from the current time.
 
 Detailed Breakdown for Stakeholders with Justifications
 Product Content Configuration:
