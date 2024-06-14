@@ -1,10 +1,10 @@
-Quick Cash
-If user enters credit card number:
-   It will validate whether it belongs to Allowed Banks (FIRST_GULF_BANK, NATIONAL_BANK_OF_ABU_DHABI, FIRST_ABU_DHABI_BANK)
-   If its true
-       validate that its a valid aed account and it belongs to the loggedin customer
-   else
-     it will check if its a valid IBAN numberI  
+If a user enters a credit card number:
+
+It will check if the card is from one of these banks: FIRST GULF BANK, NATIONAL BANK OF ABU DHABI, or FIRST ABU DHABI BANK.
+If the card is from one of these banks:
+It will make sure the account is in AED (Emirati Dirham) and belongs to the logged-in user.
+If the card is not from one of these banks:
+It will check if it is a valid IBAN number.
 
 0 0 5 * * ?
  filters records to only include those that have been modified within the past 24 hours from the current time.
