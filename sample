@@ -1,3 +1,4 @@
+*/5 * * * *
 If a user enters a credit card number:
 
 It will check if the card is from one of these banks: FIRST GULF BANK, NATIONAL BANK OF ABU DHABI, or FIRST ABU DHABI BANK.
