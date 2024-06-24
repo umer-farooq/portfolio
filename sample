@@ -1,22 +1,241 @@
-Device Details
-Device name	LAPTOP-DEIVR1CI
-Processor	Intel(R) Core(TM) i7-10850H CPU @ 2.70GHz   2.71 GHz
-Installed RAM	32.0 GB (31.8 GB usable)
-Device ID	4DC7AFB3-02D2-42D4-9B95-255459427209
-Product ID	00330-80000-00000-AA510
-System type	64-bit operating system, x64-based processor
-Pen and touch	No pen or touch input is available for this display
+22 Jun 2024 04:01:04,332 INFO (WebContainer : 31) (MOBILE-1000753765) [RequestInterceptor:]: Resource:/ft/mcsend/v1/fxrate/fetch, Request:{"amount":100.0,"fr
+omCurrency":"AED","toCurrency":"PHP","transferCurrency":"AED","transferType":"P2P","txnRef":"f1db6b034aec4e44882ec1bbcf99d622"}
 
-System SKU	LENOVO_MT_20SU_BU_Think_FM_ThinkPad P15 Gen 1
+22 Jun 2024 04:01:04,332 INFO (WebContainer : 31) (MOBILE-1000753765) [RequestResolver:]: pathURL /ft/mcsend/v1/fxrate/fetch
+22 Jun 2024 04:01:04,332 INFO (WebContainer : 31) (MOBILE-1000753765) [RequestResolver:]: rootPath:/ft
+22 Jun 2024 04:01:04,332 INFO (WebContainer : 31) (MOBILE-1000753765) [RequestResolver:]: remainingPath:/mcsend/v1/fxrate/fetch
+22 Jun 2024 04:01:04,341 INFO (WebContainer : 31) (MOBILE-1000753765) [FxRateSF:]: isNonUSDSettlement flag is :: false
+22 Jun 2024 04:01:04,343 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: xref A9f5243582a124a42bfa8fbe35e5db3e8 | channelType "MOBILE"
+22 Jun 2024 04:01:04,345 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: Connecting to URL:https://kproxy.risk-mw-pci-kong-prod.aeapps.bankfab
+.com/ae/core/trapi/v1/exchange/rates, RequestType:POST, Headers:[{"name":"XXXX","value":"A9f5243582a124a42bfa8fbe35e5db3e8","elements":[{"name":"XXXXXXXXXXXX
+XXXXXXXXXXXXXXXXXXXXX","parameters":[],"parameterCount":0}]},{"name":"XXXXXXXX","value":"EN","elements":[{"name":"XX","parameters":[],"parameterCount":0}]},{
+"name":"XXXXXXXXX","value":"MOB","elements":[{"name":"XXX","parameters":[],"parameterCount":0}]},{"name":"XXXXXXXXXXX","value":"87.200.21.97","elements":[{"n
+ame":"XX.XXX.XX.XX","parameters":[],"parameterCount":0}]}]
+22 Jun 2024 04:01:04,345 INFO (WebContainer : 31) (MOBILE-1000753765) [TextUtils:]: Masking special chars in log
+22 Jun 2024 04:01:04,347 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: Http Request:{"rateObjectRequest":{"common":{"customerSegment":"IBMB.
+MCSEND","valueDate":"2024-XX-XX","dealtCurrency":"AED","dealtAmount":100.0,"tenor":"SPOT","rateMode":"REALTIME","entity":"AE0XXXXX0001","daoCode":"1033X0100"
+,"customerID":"1188110"},"rates":[{"buyCurrency":"USD","sellCurrency":"AED"}]},"applicationArea":{"countryOfOrigin":"AE","creationDateTime":"22/Jun/2024 04:0
+1:04","requiredExecutionDate":"22/Jun/2024 04:01:04","senderId":"MOB","transactionDateTime":"2024-XX-XXT04:01:04.004Z","transactionId":"A9f5243582a124a42bfa8
+fbe35e5db3e8","language":"EN"}}
+22 Jun 2024 04:01:10,936 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: Status code 200
+22 Jun 2024 04:01:10,936 INFO (WebContainer : 31) (MOBILE-1000753765) [TextUtils:]: Masking special chars in log
+22 Jun 2024 04:01:10,938 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: Http Response:{"applicationArea":{"countryOfOrigin":"AE","senderId":"
+MOB","transactionId":"A9f5243582a124a42bfa8fbe35e5db3e8","transactionDateTime":"2024-XX-XXT04:01:04.004Z","language":"EN","creationDateTime":"22/Jun/2024 04:
+01:04","requiredExecutionDate":"22/Jun/2024 04:01:04"},"responseStatus":{"status":"SUCCESS","errorDetails":[{"errorCode":"0","errorDesc":"SUCCESS"}]},"common
+":{"rateMode":"DBMODE","rateReferenceNumber":"NA"},"ratesResponse":[{"buyCurrency":"USD","sellCurrency":"AED","buyingRate":3.65779,"sellingRate":3.68827,"dea
+ltCurrency":"AED","dealtAmount":100.0,"status":"OK","ccyPair":"USD.AED/S","GMbuyingRate":3.67248,"GMsellingRate":3.67358,"GMbuyingMargin":0,"GMsellingMargin"
+:0}]}
+22 Jun 2024 04:01:10,938 INFO (WebContainer : 31) (MOBILE-1000753765) [HttpConnector:]: Http request processed in :6595 msec for URL:https://kproxy.risk-mw-p
+ci-kong-prod.aeapps.bankfab.com/ae/core/trapi/v1/exchange/rates
+22 Jun 2024 04:01:10,939 INFO (WebContainer : 31) (MOBILE-1000753765) [FxRateServiceInvoker:]: API URL is : https://kproxy.risk-mw-pci-kong-prod.aeapps.bankf
+ab.com/ae/core/trapi/v1/exchange/rates
+22 Jun 2024 04:01:10,939 INFO (WebContainer : 31) (MOBILE-1000753765) [FxRateServiceInvoker:]: Handle 4XX errors in sf class..
+22 Jun 2024 04:01:10,939 ERROR (WebContainer : 31) (MOBILE-1000753765) [ExceptionHandler:]: Handle null pointer exception for:java.lang.NullPointerException
+22 Jun 2024 04:01:10,940 INFO (WebContainer : 31) (MOBILE-1000753765) [LocaleHelper:]: locale:en, code:SYS_DEFAULT_ERROR, text translation:We are unable to p
+rocess your request right now. Please try again later.
+22 Jun 2024 04:01:10,943 INFO (WebContainer : 31) (MOBILE-1000753765) [RequestInterceptor:]: Resource:/ft/mcsend/v1/fxrate/fetch response:{"result":{"status"
+:"error","errorInfo":{"code":"SYS_DEFAULT_ERROR","desc":"We are unable to process your request right now. Please try again later. "}}}
+22 Jun 2024 04:01:10,943 INFO (WebContainer : 31) (MOBILE-1000753765) [UserStatisticsSF:]: CIF ID in PageViewReport userID 10007X3765, convid ba461cb4f8e3448
+a81baf93f48a3e2f5, url point /ft/mcsend/v1/fxrate/fetch::
+22 Jun 2024 04:01:10,944 INFO (WebContainer : 31) (MOBILE-1000753765) [UserStatisticsSF:]: Page View Report {"cif":"10007X3765","cin":"1188110","channelType"
+:"MOBILE","viewedPage":"/ft/mcsend/v1/fxrate/fetch","httpStatus":"SUCCESS","httpErrorCode":"0","httpErrorDesc":"SUCCESS","apiStatus":"error","apiErrorCode":"
+SYS_DEFAULT_ERROR","rc":"A9f5243582a124a42bfa8fbe35e5db3e8","creationTime":1719014464062,"completionTime":1719014470943,"remoteIp":"87.200.21.97"} ::
+22 Jun 2024 04:01:10,980 INFO (WebContainer : 31) (MOBILE-1000753765) [UserStatisticsSF:]: exiting publish2UserStatisticsQ method
+22 Jun 2024 04:01:10,980 INFO (WebContainer : 31) (MOBILE-1000753765) [ResponseFilter:]: == URL:/ft/mcsend/v1/fxrate/fetch processed, total time:6932 msec ==
+-----------------------------------------
+
+	public McFxRateFetchResponse fetchMCFxRate(final McFxRateFetchRequest request) {
+		McFxRateFetchResponse response = new McFxRateFetchResponse();
+		return execute(request, response, req -> {
+			boolean isNonUSDSettlement = false;
+			Double marginPerc = null;
+			Double fxRate = null;
+			Double conversionRate = null;
+			String toCurrency = request.getToCurrency();
+			Integer timeToLive = null;
+			
+			List<McProduct> productByCurrAndType = mcSendRepository.getProductByCurrAndType(request.getToCurrency(),
+					request.getTransferType());
+			if (!productByCurrAndType.isEmpty()) {
+				McProduct mcProduct = productByCurrAndType.get(0);
+				if (Objects.nonNull(mcProduct) && StringUtils.isNotBlank(mcProduct.getCurrencyCode())
+						&& mcProduct.getCurrencyCode().equalsIgnoreCase(mcProduct.getSendCurrency())) {
+					isNonUSDSettlement = true;
+				}
+			}
+			log.info("isNonUSDSettlement flag is :: {}", isNonUSDSettlement);
+			if(!isNonUSDSettlement) {
+				log.debug("continuing with non USD settlement flow");
+				ExchangeRateRequest exchangeRateRequest = new ExchangeRateRequest();
+				String dealtCurrency = CURR_AED;
+				String buyCurrency = CURR_USD;
+				String sellCurrency = CURR_AED;
+				exchangeRateRequest.addRate(buyCurrency, sellCurrency, dealtCurrency);
+				exchangeRateRequest.setCreditValueDate(new Date());
+				exchangeRateRequest.setCustomerRateSegment(MCSEND_SEGMENT);
+				exchangeRateRequest.setAmount(request.getAmount());
+				
+				// 1.Fetch AED to USD rate
+				FxRateGetRateResponse exchangeRateResponse = exchangeRateServiceInvoker
+						.fetchExchangeRate(exchangeRateRequest);
+				if (Objects.nonNull(exchangeRateResponse)
+						&& RATE_MODE_REALTIME.equalsIgnoreCase(exchangeRateResponse.getCommon().getRateMode())
+						&& exchangeRateResponse.getRatesResponse().isEmpty()) {
+					throw new AppException(ErrorCodes.ERROR_FETCH_FX_RATE);
+				}
+
+				if (Objects.nonNull(exchangeRateResponse)
+						&& !RATE_MODE_REALTIME.equalsIgnoreCase(exchangeRateResponse.getCommon().getRateMode())
+						&& exchangeRateResponse.getRateResponse().isEmpty()) {
+					throw new AppException(ErrorCodes.ERROR_FETCH_FX_RATE);
+				}
+				
+				RateResponse rateResponse = RATE_MODE_REALTIME.equalsIgnoreCase(exchangeRateResponse.getCommon().getRateMode())
+						? exchangeRateResponse.getRatesResponse().get(0)
+						: exchangeRateResponse.getRateResponse().get(0);
+				Double aedToUsdRate = 1/rateResponse.getSellingRate();
+				
+				// 2.Fetch USD to FCY rate from DB
+				
+				McFcyRate mcFcyRate = mcSendRepository.getMcFcyRate(toCurrency, request.getTransferType());
+				if (Objects.isNull(mcFcyRate)) {
+					throw new AppException(ErrorCodes.ERROR_FETCH_FX_RATE);
+				}
+				Double usdToFcyRate = mcFcyRate.getFxRate();
+				conversionRate = aedToUsdRate * usdToFcyRate;
+				log.info("conversionRate received in non USD settlement flow is :: {}", conversionRate);
+				
+			}else {
+				//getDeal invocation
+				log.debug("continuing with USD settlement flow :: ");
+				FxRateFetchRequest fxRatefetchReq = new FxRateFetchRequest();
+				fxRatefetchReq.setFromCurrency(request.getFromCurrency());
+				fxRatefetchReq.setToCurrency(toCurrency);
+				fxRatefetchReq.setTransferCurrency(request.getTransferCurrency());
+				fxRatefetchReq.setAmount(request.getAmount());
+				fxRatefetchReq.setTxnRef(request.getTxnRef());
+				GetDealResponse dealResponse = getDeal(fxRatefetchReq);
+				log.debug("Deal resp received is :: {}", dealResponse);
+				if (Objects.nonNull(dealResponse)&&Objects.nonNull(dealResponse.getRate())) {
+					conversionRate = 1/dealResponse.getRate().getValue();
+					timeToLive = dealResponse.getTimeToLive();
+				}else {
+					throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR);
+				}
+				log.info("conversionRate received in USD settlement flow is :: {} and timeToLive is :: {}", conversionRate, timeToLive);
+			}
+			
+			// 3.fetch margin
+			//Double fxRate = aedToFcyRate;
+			if (!productByCurrAndType.isEmpty()) {
+				McProduct mcProduct = productByCurrAndType.get(0);
+				if (Objects.nonNull(mcProduct)) {
+					List<String> staffSectorList = settingsRepository.getStaffSectorList();
+					if (SessionContext.getSession().getUser().identifyStaff(staffSectorList)) {
+						marginPerc = mcProduct.getStaffFxMargin();
+					}else
+						marginPerc = mcProduct.getFxMargin();
+				}
+			}
+			if (Objects.nonNull(marginPerc)) {
+				fxRate = (conversionRate * (1 - marginPerc / 100));
+			}
+			McFxRate mcFxRate = new McFxRate();
+			mcFxRate.setRate(new Amount(fxRate, toCurrency));
+			mcFxRate.setTransferAmount(new Amount(fxRate * request.getAmount(), toCurrency));
+			mcFxRate.setFromCurrency(request.getFromCurrency());
+			mcFxRate.setToCurrency(toCurrency);
+			mcFxRate.setTimeToLive(timeToLive);
+			List<McFxRate> mcFxRates = new ArrayList<>();
+			mcFxRates.add(mcFxRate);
+			response.setMcFxRates(mcFxRates);
+			log.debug("McFxRate is :: {}", mcFxRate.getRate());
+			
+			// 4. UPDATE rates in txnsession
+			TxnSession txnSession = sessionRepository.findTxnSessionByTxnRef(req.getTxnRef());
+			String exchangeRateStr = txnSession.getExchangeRate();
+			log.debug("exchangeRateStr received from DB is :: {}", exchangeRateStr);
+			FxRateGetDealResponse fxRateDealResponse = null;
+			if(isNonUSDSettlement) {
+				if (StringUtils.isNotBlank(exchangeRateStr)) {
+					fxRateDealResponse = JsonUtils.convertToObject(FxRateGetDealResponse.class, exchangeRateStr);
+					log.debug("exchangeRate received from deal service is :: {}", fxRateDealResponse);
+				}else {
+					log.error("Didnt receive exchangerate infor from session repo");
+				}
+			}
+			McExchangeRate mcExchangeRate = new McExchangeRate();
+			//if fx rate not exist in session
+			if (StringUtils.isNotBlank(exchangeRateStr)) {
+				mcExchangeRate = JsonUtils.convertToObject(McExchangeRate.class, exchangeRateStr);
+			}
+			mcExchangeRate.setFxRate(conversionRate);//dealWrapperRate
+			mcExchangeRate.setFxRateWithMargin(fxRate);
+			mcExchangeRate.setFxMargin(marginPerc);
+			mcExchangeRate.setTrapiFxRate(conversionRate);//dealWrapperRate
+			mcExchangeRate.setExchangeRate(!Objects.isNull(fxRateDealResponse)?getExchangeRateObj(fxRateDealResponse):null);
+			log.info("final mcExchangeRate formed is :: {}", mcExchangeRate);
+			
+			TxnSession session = new TxnSession();
+			session.setExchangeRate(JsonUtils.convertToJson(mcExchangeRate));
+			session.setTxnRef(req.getTxnRef());
+			log.info("Update TXN Session | txnRef: {} exchangerate:{}",req.getTxnRef(),JsonUtils.convertToJson(mcExchangeRate));
+			sessionRepository.updateExchangeRate(session);
+
+			return response;
+		});
+	}
+
+----------------------------------------------------
+public FxRateGetRateResponse fetchExchangeRate(ExchangeRateRequest iibRequest) {
+		return invoke(ServiceURLs.FX_EXCHANGE_RATE,iibRequest,requestComposer, responseComposer);
+	}
+
+----------------------------------------------------
+protected <T, R> R invoke(final ServiceURLs serviceURL, T reqObj, Function<T, String> requestComposer, Function<ConnectorResponse, R> responseComposer) {
+		ConnectorResponse response = null;
+		R respObj = null;
+		long t1 = System.currentTimeMillis();
+		try {
+			serviceInvokerHelper.populateServicUrlEnum(serviceURL);
+			String request = requestComposer.apply(reqObj);
+			response = httpConnector.post(serviceURL, request, null);
+			handleResponse(response, serviceURL);
+			respObj = responseComposer.apply(response);
+		} catch (Exception e) {
+			if (e instanceof AppException || e instanceof SysException) {
+				throw e;
+			}
+			log.error("service invoke failed.." , e);
+			throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR, e);
+		} finally {
+			log.debug("Service:{} invocation time:{} msec", serviceURL, System.currentTimeMillis() - t1);
+			captureHttpStatus(response);
+		}
+		return respObj;
+	}
+
+-------------------------------------------------------
+private final Function<ExchangeRateRequest,String> requestComposer = (iibRequest)->{	   
+	    Map<String, Object> reqMap = new HashMap<>();
+	    SessionInfo sessionInfo = SessionContext.getSession();
+	    reqMap.put(APPLICATION_AREA,FABUtils.INSTANCE.getIibReqApplicationArea(sessionInfo.getChannelType(), localeHelper.resolveLanguage(), sessionInfo.getXref()));
+	    reqMap.put(RATE_REQ_OBJECT, populateIIBRequest(iibRequest));
+	    return JsonUtils.convertToJson(reqMap);
+	};
+		
+	private final Function<ConnectorResponse, FxRateGetRateResponse> responseComposer = (response) -> {
+		FxRateGetRateResponse serviceResponse = new FxRateGetRateResponse();
+		if (AppConstants.SUCCESS.equalsIgnoreCase(JsonUtils.getJsonPrimitive(response.getJsonResponse(), "$.responseStatus.status"))) {
+			serviceResponse = JsonUtils.convertToObject(FxRateGetRateResponse.class, response.getJsonResponse());
+		} else {
+			throw new AppException(ErrorCodes.ERROR_FETCH_FX_RATE);
+		}	
+		
+		return serviceResponse;
+	};
 
 
-OS Details
-Edition	Windows 11 Enterprise
-Version	23H2
-Installed on	‎27/‎04/‎2023
-OS build	22631.3737
-Serial number	PF31216M
-Experience	Windows Feature Experience Pack 1000.22700.1009.0
 
 
 https://www.credly.com/users/umer-farooq.1cd67eef/badges
