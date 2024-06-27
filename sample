@@ -8,6 +8,8 @@ error: filespec must match the canonical format: [[namespace/]pod:]file/path
 [root@g42uatlibmb1 npss]# kubectl cp npss-notifications-6467fb85db-4g5bq :/var/ssl-store-kafka-ks/..2024_06_24_07_46_23.547751902/ibmb.keystore.uat.jks  /root/abc.jks
 error: filespec must match the canonical format: [[namespace/]pod:]file/path
 
+kubectl cp npss/npss-notifications-6467fb85db-4g5bq:/var/ssl-store-kafka-ks/..2024_06_24_07_46_23.547751902/ibmb.keystore.uat.jks /root/abc.jks
+
 
 
 String jsonString = "{"
