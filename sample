@@ -1,3 +1,5 @@
+kubectl cp <pod_name>:/var/kafka-ssl/abc.jks /local/path/abc.jks
+
 String jsonString = "{"
     + "\"applicationArea\":{"
         + "\"countryOfOrigin\":\"AE\","
