@@ -1,4 +1,7 @@
 kubectl cp <pod_name>:/var/kafka-ssl/abc.jks /local/path/abc.jks
+kubectl exec -n <namespace> <pod_name> -- readlink -f /var/kafka-ssl/abc.jks
+
+
 
 String jsonString = "{"
     + "\"applicationArea\":{"
