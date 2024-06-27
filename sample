@@ -1,6 +1,13 @@
 kubectl cp <pod_name>:/var/kafka-ssl/abc.jks /local/path/abc.jks
 kubectl exec -n <namespace> <pod_name> -- readlink -f /var/kafka-ssl/abc.jks
 
+[root@g42uatlibmb1 npss]# kubectl exec -n npss npss-notifications-6467fb85db-4g5bq  -- readlink -f /var/ssl-store-kafka-ks/ibmb.keystore.uat.jks
+/var/ssl-store-kafka-ks/..2024_06_24_07_46_23.547751902/ibmb.keystore.uat.jks
+[root@g42uatlibmb1 npss]# kubectl cp npss-notifications-6467fb85db-4g5bq :..2024_06_24_07_46_23.547751902/ibmb.keystore.uat.jks /root/abc.jks
+error: filespec must match the canonical format: [[namespace/]pod:]file/path
+[root@g42uatlibmb1 npss]# kubectl cp npss-notifications-6467fb85db-4g5bq :/var/ssl-store-kafka-ks/..2024_06_24_07_46_23.547751902/ibmb.keystore.uat.jks  /root/abc.jks
+error: filespec must match the canonical format: [[namespace/]pod:]file/path
+
 
 
 String jsonString = "{"
