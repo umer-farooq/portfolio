@@ -1,132 +1,129 @@
 AE208091031001991861093
 AE580210000002102733554
+
+
 private void prepareAcctLoanDeposits(CustPositionResponse custPosition, CustomerProducts customerFavouriteProducts, CustomerProducts customerProducts, FeaturePromotion featurePromotion,
-			Map<String, ProductPreference> userPreferences) {
-		//sort accounts in customer position accounts by sorting order of Account types
-		sortAccountsByAccountType(custPosition);
-		List<AccountDetails> acctDetails = custPosition.getListOfAccounts();
-		if (acctDetails != null && !acctDetails.isEmpty()) {
-			
-			for (AccountDetails acctDtl : acctDetails) {
-				// Decide whether to show on dashboard
-					if (isLoanAccountCode(acctDtl.getAccountType())) {
-						if(!StringUtils.startsWithAny(acctDtl.getAccountNo(), SKIP_PD_LOANS)) {
-							Loan loan = getLoanData(acctDtl);
-							loan.setProduct(ProductTypes.LOAN.name());
-
-							if (userPreferences.containsKey(loan.getLoanNumber())) {
-								ProductPreference prodPref = userPreferences.get(loan.getLoanNumber());
-								loan.setNickName(prodPref.getNickName());
-								loan.setDisplaySequence(prodPref.getDisplaySequence());
-								loan.setIsFavorite(prodPref.getIsFavorite());
-								loan.setIsHide(prodPref.getIsHide());
-								// Add all favorite products
-								if (prodPref.getIsFavorite()) {
-									customerFavouriteProducts.addLoan(loan);
-								}
-							} else {
-								loan.setDisplaySequence(0);
-							}
-							customerProducts.addLoan(loan);
-						} else {
-							log.warn("#### Skipping PD loan from customer loan dashboard:{}", acctDtl.getAccountNo());
-						}
-					} else {
-						//Skip deposit with HNI / ISL / NIF / ISB
-						if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
-							String accountId = acctDtl.getAccountNo();
-							if(StringUtils.startsWithAny(accountId, AppConstants.SKIP_PREFIX_DEPOSIT)) {
-								acctDtl.setAccountNo(accountId.substring(3));
-							}
-						}
-						Account acct = getAccountAndDepositData(acctDtl);
-
-
-						if (userPreferences.containsKey(acct.getNumber())) {
-							ProductPreference prodPref = userPreferences.get(acct.getNumber());
-							acct.setNickName(prodPref.getNickName());
-							acct.setDisplaySequence(prodPref.getDisplaySequence());
-							acct.setIsFavorite(prodPref.getIsFavorite());
-							acct.setIsHide(prodPref.getIsHide());
-							acct.setIban(acctDtl.getIban());
-							// Add all favorite products
-							if (prodPref.getIsFavorite()) {
-								if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
-									acct.setProduct(ProductTypes.DEPOSIT.name());
-									customerFavouriteProducts.addDeposit(acct);
-								} else {
-									acct.setProduct(ProductTypes.ACCOUNT.name());
-									customerFavouriteProducts.addAccount(acct);
-								}
-							}
-						} else {
-							acct.setDisplaySequence(0);
-						}
-
-						// If iSave account to get the count to show on dashboard
-						if (ProductCode.ISAVE.getCode().equals(acctDtl.getAccountCategoryCode())) {
-							acct.setAccountSubType("isave");
-							customerProducts.addIsave(acct);
-							customerProducts.addAccount(acct); // Adding Isave Account in account list after discussing with Pratik 
-						} else {
-							if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
-								customerProducts.addDeposit(acct);
-							} else {
-								customerProducts.addAccount(acct);
-							}
-						}
-						
-						if(Objects.nonNull(acctDtl.getDebitCards()) && !acctDtl.getDebitCards().isEmpty()) {
-							acctDtl.getDebitCards().stream().forEach(debitCard -> {
-								if(DateTimeHelper.INSTANCE.isFutureDate(debitCard.getExpirationDate(), DATE_DDMMYYYY)) {
-									if (DebitCardStatus.NEW_CARD.getCode().equals(debitCard.getCardStatus())) {
-										featurePromotion.addMaskedDcNumber(TextUtils.INSTANCE.maskCardNumber(debitCard.getDebitCardIdentifier(),AppConstants.MASK_CHARCTER));
-										if("N".equalsIgnoreCase(debitCard.getCardDisplayIndicator())){
-										featurePromotion.incrementDebitCardCount();
-										}
-									}
-									if (AppConstants.DBT_CARD_ALLOWED_STATUS.contains(debitCard.getCardStatus())) {
-										Product product = new Product();
-										product.setLabel(TextUtils.INSTANCE.maskCardNumber(debitCard.getDebitCardIdentifier(), AppConstants.MASK_CHARCTER));
-										product.setProdRef(TextUtils.INSTANCE.getCardRef(debitCard.getDebitCardIdentifier()));
-										product.setStatus(DebitCardStatus.find(debitCard.getCardStatus()).getStatusDesc());
-										product.setProductType(ProductTypes.DEBIT);
-										product.setExpiryDate(DateTimeHelper.INSTANCE.formatDate(debitCard.getExpirationDate(), DATE_DDMMYYYY, DATE_MMYY));
-										if (Objects.nonNull(debitCard.getIssueDate())
-												&& !debitCard.getIssueDate().isEmpty())
-											product.setIssueDate(DateTimeHelper.INSTANCE
-													.formatDate(debitCard.getIssueDate(), DATE_DDMMYYYY, DATE_MMYY));
-										else {
-											product.setIssueDate(debitCard.getIssueDate());
-										}
-										product.setDigitalCardIndicator(debitCard.getDigitalCardIndicator());
-										product.setVirtualCardIndicator(debitCard.getVirtualCardIndicator());
-										//product.setIssueDate(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, ISSUE_DATE).getDescription());
-										//product.setDigitalCardIndicator(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, DIGITAL_CARD_INDICATOR).getDescription());
-										//product.setVirtualCardIndicator(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, VIRTUAL_CARD_INDICATOR).getDescription());
-										log.info(" Virttual Debit card IssueDate, Digital" ,product.getIssueDate(),product.getVirtualCardIndicator(),product.getDigitalCardIndicator());
-										acct.addDebitCard(product);
-									}
-								}
-								
-								log.info("Debit Card Status "+ DebitCardStatus.CARD_ACTIVE.getCode());
-								log.info("Debit Fetch Card Status "+ debitCard.getCardStatus());
-								
-								if (DebitCardStatus.CARD_ACTIVE.getCode().equals(debitCard.getCardStatus())) {									
-									if("N".equalsIgnoreCase(debitCard.getCardDisplayIndicator())){
-									featurePromotion.incrementActiveDebitCardCount();
-									}
-								}
-								
-								
-							});
-						}
-					}
-				} else {
-					log.warn("Account:{} is not allowed on Dashboard View", acctDtl);
-				}
-			}
-	}
+        Map<String, ProductPreference> userPreferences) {
+    // sort accounts in customer position accounts by sorting order of Account types
+    sortAccountsByAccountType(custPosition);
+    List<AccountDetails> acctDetails = custPosition.getListOfAccounts();
+    
+    if (acctDetails != null && !acctDetails.isEmpty()) {
+        for (AccountDetails acctDtl : acctDetails) {
+            // Decide whether to show on dashboard
+            if (isLoanAccountCode(acctDtl.getAccountType())) {
+                if (!StringUtils.startsWithAny(acctDtl.getAccountNo(), SKIP_PD_LOANS)) {
+                    Loan loan = getLoanData(acctDtl);
+                    loan.setProduct(ProductTypes.LOAN.name());
+                    
+                    if (userPreferences.containsKey(loan.getLoanNumber())) {
+                        ProductPreference prodPref = userPreferences.get(loan.getLoanNumber());
+                        loan.setNickName(prodPref.getNickName());
+                        loan.setDisplaySequence(prodPref.getDisplaySequence());
+                        loan.setIsFavorite(prodPref.getIsFavorite());
+                        loan.setIsHide(prodPref.getIsHide());
+                        // Add all favorite products
+                        if (prodPref.getIsFavorite()) {
+                            customerFavouriteProducts.addLoan(loan);
+                        }
+                    } else {
+                        loan.setDisplaySequence(0);
+                    }
+                    customerProducts.addLoan(loan);
+                } else {
+                    log.warn("#### Skipping PD loan from customer loan dashboard:{}", acctDtl.getAccountNo());
+                }
+            } else {
+                // Skip deposit with HNI / ISL / NIF / ISB
+                if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
+                    String accountId = acctDtl.getAccountNo();
+                    if (StringUtils.startsWithAny(accountId, AppConstants.SKIP_PREFIX_DEPOSIT)) {
+                        acctDtl.setAccountNo(accountId.substring(3));
+                    }
+                }
+                Account acct = getAccountAndDepositData(acctDtl);
+                
+                if (userPreferences.containsKey(acct.getNumber())) {
+                    ProductPreference prodPref = userPreferences.get(acct.getNumber());
+                    acct.setNickName(prodPref.getNickName());
+                    acct.setDisplaySequence(prodPref.getDisplaySequence());
+                    acct.setIsFavorite(prodPref.getIsFavorite());
+                    acct.setIsHide(prodPref.getIsHide());
+                    acct.setIban(acctDtl.getIban());
+                    // Add all favorite products
+                    if (prodPref.getIsFavorite()) {
+                        if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
+                            acct.setProduct(ProductTypes.DEPOSIT.name());
+                            customerFavouriteProducts.addDeposit(acct);
+                        } else {
+                            acct.setProduct(ProductTypes.ACCOUNT.name());
+                            customerFavouriteProducts.addAccount(acct);
+                        }
+                    }
+                } else {
+                    acct.setDisplaySequence(0);
+                }
+                
+                // If iSave account to get the count to show on dashboard
+                if (ProductCode.ISAVE.getCode().equals(acctDtl.getAccountCategoryCode())) {
+                    acct.setAccountSubType("isave");
+                    customerProducts.addIsave(acct);
+                    customerProducts.addAccount(acct); // Adding Isave Account in account list after discussing with Pratik
+                } else {
+                    if (AccountType.TD.getCode().equals(acctDtl.getAccountType())) {
+                        customerProducts.addDeposit(acct);
+                    } else {
+                        customerProducts.addAccount(acct);
+                    }
+                }
+                
+                if (Objects.nonNull(acctDtl.getDebitCards()) && !acctDtl.getDebitCards().isEmpty()) {
+                    acctDtl.getDebitCards().stream().forEach(debitCard -> {
+                        if (DateTimeHelper.INSTANCE.isFutureDate(debitCard.getExpirationDate(), DATE_DDMMYYYY)) {
+                            if (DebitCardStatus.NEW_CARD.getCode().equals(debitCard.getCardStatus())) {
+                                featurePromotion.addMaskedDcNumber(TextUtils.INSTANCE.maskCardNumber(debitCard.getDebitCardIdentifier(), AppConstants.MASK_CHARCTER));
+                                if ("N".equalsIgnoreCase(debitCard.getCardDisplayIndicator())) {
+                                    featurePromotion.incrementDebitCardCount();
+                                }
+                            }
+                            if (AppConstants.DBT_CARD_ALLOWED_STATUS.contains(debitCard.getCardStatus())) {
+                                Product product = new Product();
+                                product.setLabel(TextUtils.INSTANCE.maskCardNumber(debitCard.getDebitCardIdentifier(), AppConstants.MASK_CHARCTER));
+                                product.setProdRef(TextUtils.INSTANCE.getCardRef(debitCard.getDebitCardIdentifier()));
+                                product.setStatus(DebitCardStatus.find(debitCard.getCardStatus()).getStatusDesc());
+                                product.setProductType(ProductTypes.DEBIT);
+                                product.setExpiryDate(DateTimeHelper.INSTANCE.formatDate(debitCard.getExpirationDate(), DATE_DDMMYYYY, DATE_MMYY));
+                                if (Objects.nonNull(debitCard.getIssueDate()) && !debitCard.getIssueDate().isEmpty()) {
+                                    product.setIssueDate(DateTimeHelper.INSTANCE.formatDate(debitCard.getIssueDate(), DATE_DDMMYYYY, DATE_MMYY));
+                                } else {
+                                    product.setIssueDate(debitCard.getIssueDate());
+                                }
+                                product.setDigitalCardIndicator(debitCard.getDigitalCardIndicator());
+                                product.setVirtualCardIndicator(debitCard.getVirtualCardIndicator());
+                                // product.setIssueDate(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, ISSUE_DATE).getDescription());
+                                // product.setDigitalCardIndicator(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, DIGITAL_CARD_INDICATOR).getDescription());
+                                // product.setVirtualCardIndicator(staticDataRepository.fetchStaticData_EN(VIRTUAL_DEBIT_CARD, VIRTUAL_CARD_INDICATOR).getDescription());
+                                log.info("Virtual Debit card IssueDate, Digital", product.getIssueDate(), product.getVirtualCardIndicator(), product.getDigitalCardIndicator());
+                                acct.addDebitCard(product);
+                            }
+                        }
+                        
+                        log.info("Debit Card Status " + DebitCardStatus.CARD_ACTIVE.getCode());
+                        log.info("Debit Fetch Card Status " + debitCard.getCardStatus());
+                        
+                        if (DebitCardStatus.CARD_ACTIVE.getCode().equals(debitCard.getCardStatus())) {
+                            if ("N".equalsIgnoreCase(debitCard.getCardDisplayIndicator())) {
+                                featurePromotion.incrementActiveDebitCardCount();
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    } else {
+        log.warn("Account:{} is not allowed on Dashboard View", acctDtl);
+    }
+}
 
 kubectl cp <pod_name>:/var/kafka-ssl/abc.jks /local/path/abc.jks
 kubectl exec -n <namespace> <pod_name> -- readlink -f /var/kafka-ssl/abc.jks
