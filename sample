@@ -91,6 +91,137 @@
 	}
 
 
+private String[] parseCsvLine(String line) {
+    List<String> result = new ArrayList<>();
+    boolean inQuotes = false;
+    StringBuilder current = new StringBuilder();
+
+    for (char c : line.toCharArray()) {
+        if (c == '"') {
+            inQuotes = !inQuotes;
+        } else if (c == ',' && !inQuotes) {
+            result.add(current.toString());
+            current = new StringBuilder();
+        } else {
+            current.append(c);
+        }
+    }
+    result.add(current.toString());
+    String[] parsedLine = result.toArray(new String[0]);
+
+    // Validate second column
+    if (parsedLine.length > 1) {
+        String secondColumn = parsedLine[1].replace("\"", "");
+        if (!isNumericWithCommaAndDot(secondColumn)) {
+            throw new IllegalArgumentException("Second column must be numeric and may contain only digits, commas, and dots");
+        }
+    } else {
+        throw new IllegalArgumentException("Second column must be present");
+    }
+
+    return parsedLine;
+}
+
+private boolean isNumericWithCommaAndDot(String str) {
+    return str.matches("[0-9,.]+");
+}
+And here are the updated unit tests:
+
+java
+Copy code
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SegmentUploaderTest {
+
+    SegmentUploader segmentUploader = new SegmentUploader();
+
+    @Test
+    public void testParseCsvLine_WithCommasInQuotes() {
+        String line = "3605561,\"1,000\"";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"3605561", "1,000"}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithDotsInQuotes() {
+        String line = "3605561,\"1.000\"";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"3605561", "1.000"}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithCommasAndDotsInQuotes() {
+        String line = "3605561,\"1,000.00\"";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"3605561", "1,000.00"}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithoutQuotes() {
+        String line = "4676587,1000";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"4676587", "1000"}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithMultipleColumns() {
+        String line = "3605561,\"1,000\",test,\"data,with,commas\"";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"3605561", "1,000", "test", "data,with,commas"}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithEmptyFields() {
+        String line = "3605561,\"\",,";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+
+    @Test
+    public void testParseCsvLine_WithNonNumericSecondColumn() {
+        String line = "3605561,\"nonNumeric\"";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+
+    @Test
+    public void testParseCsvLine_WithInvalidCharactersInSecondColumn() {
+        String line = "3605561,\"1,000a\"";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+
+    @Test
+    public void testParseCsvLine_WithMismatchedQuotes() {
+        String line = "3605561,\"1,000";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+
+    @Test
+    public void testParseCsvLine_WithExtraCommas() {
+        String line = "3605561,\"1,000\",,,";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{"3605561", "1,000", "", "", ""}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithNoData() {
+        String line = "";
+        String[] result = segmentUploader.parseCsvLine(line);
+        assertArrayEquals(new String[]{""}, result);
+    }
+
+    @Test
+    public void testParseCsvLine_WithNonNumericDataInSecondColumn() {
+        String line = "3605561,notNumeric";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+
+    @Test
+    public void testParseCsvLine_WithQuotedCommasInSecondColumn() {
+        String line = "3605561,\"data,with,commas\"";
+        assertThrows(IllegalArgumentException.class, () -> segmentUploader.parseCsvLine(line));
+    }
+}
+
 private void prepareAcctLoanDeposits(CustPositionResponse custPosition, CustomerProducts customerFavouriteProducts, CustomerProducts customerProducts, FeaturePromotion featurePromotion,
         Map<String, ProductPreference> userPreferences) {
     // sort accounts in customer position accounts by sorting order of Account types
