@@ -4,7 +4,51 @@
 4116175,"1,000"
 1074462,"1,000"
 4676587,1000
+import org.apache.commons.lang3.StringUtils;
 
+private String[] parseCsvLine(String line) {
+    List<String> result = new ArrayList<>();
+    boolean inQuotes = false;
+    StringBuilder current = new StringBuilder();
+
+    for (char c : line.toCharArray()) {
+        if (c == '"') {
+            inQuotes = !inQuotes;
+        } else if (c == ',' && !inQuotes) {
+            result.add(current.toString());
+            current = new StringBuilder();
+        } else {
+            current.append(c);
+        }
+    }
+    result.add(current.toString());
+
+    String[] parsedLine = result.toArray(new String[0]);
+
+    // Validate second column if present
+    if (parsedLine.length > 1) {
+        String secondColumn = StringUtils.strip(parsedLine[1], "\"").trim();
+        if (!isValidSecondColumn(secondColumn)) {
+            return StringUtils.EMPTY_STRING_ARRAY;
+        }
+    } else {
+        return StringUtils.EMPTY_STRING_ARRAY;
+    }
+
+    // Validate first column
+    String firstColumn = StringUtils.strip(parsedLine[0], "\"").trim();
+    if (StringUtils.isEmpty(firstColumn)) {
+        return StringUtils.EMPTY_STRING_ARRAY;
+    }
+
+    return parsedLine;
+}
+
+private boolean isValidSecondColumn(String column) {
+    // Your validation logic for the second column goes here
+    // Example: Check if it's numeric with commas and dots
+    return column.matches("[0-9,.]+");
+}
 /**
 	 * Method to create segment for file upload.
 	 * 
