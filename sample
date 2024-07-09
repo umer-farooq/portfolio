@@ -91,6 +91,8 @@
 	}
 
 
+import org.apache.commons.lang3.StringUtils;
+
 private String[] parseCsvLine(String line) {
     List<String> result = new ArrayList<>();
     boolean inQuotes = false;
@@ -107,21 +109,33 @@ private String[] parseCsvLine(String line) {
         }
     }
     result.add(current.toString());
+
     String[] parsedLine = result.toArray(new String[0]);
 
-    // Validate second column
+    // Validate second column if present
     if (parsedLine.length > 1) {
-        String secondColumn = parsedLine[1].replace("\"", "");
-        if (!isNumericWithCommaAndDot(secondColumn)) {
-            throw new IllegalArgumentException("Second column must be numeric and may contain only digits, commas, and dots");
+        String secondColumn = StringUtils.strip(parsedLine[1], "\"").trim();
+        if (!isValidSecondColumn(secondColumn)) {
+            return StringUtils.EMPTY_STRING_ARRAY;
         }
     } else {
-        throw new IllegalArgumentException("Second column must be present");
+        return StringUtils.EMPTY_STRING_ARRAY;
+    }
+
+    // Validate first column
+    String firstColumn = StringUtils.strip(parsedLine[0], "\"").trim();
+    if (StringUtils.isEmpty(firstColumn)) {
+        return StringUtils.EMPTY_STRING_ARRAY;
     }
 
     return parsedLine;
 }
 
+private boolean isValidSecondColumn(String column) {
+    // Your validation logic for the second column goes here
+    // Example: Check if it's numeric with commas and dots
+    return column.matches("[0-9,.]+");
+}
 private boolean isNumericWithCommaAndDot(String str) {
     return str.matches("[0-9,.]+");
 }
