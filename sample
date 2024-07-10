@@ -1,3 +1,11 @@
+		return getWebClient(finalUrl, false).method(httpMethod).uri(finalUrl)
+				.headers(header -> header.putAll(headers)).body(BodyInserters.fromValue(xmlRequest))
+				.exchangeToMono(clientResponse -> processResponse(serviceName, finalUrl, headers, t1, clientResponse))
+				.contextCapture()
+				.retryWhen(Retry.backoff(3, Duration.ofMillis(500))
+					            .filter(this::isRetryRequired));
+
+
 3605561,"1,000"
 3189338,"1,000"
 5734543,"1,000"
