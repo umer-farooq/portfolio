@@ -23,6 +23,59 @@ Jun 21, 2024 @ 14:33:44.249	trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5, simSwapSta
 				Still callsign request is not recieved in mw and they are saying the request is invalid josn format that is why they r not able to provide request 
 3)https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status   ---------its not working from postman as Etislat connectivity  issue As per Prasant
 
+Update on Middleware Risk Endpoint Whitelisting and Logging:
+
+1. Whitelisting and Initial Triggering:
+Callsign has successfully whitelisted the middleware risk endpoint: https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status from Akhaya. Following this, we triggered the ETG request, and the middleware team provided us with the request and response details, which we have reported to the team.
+
+Update:
+We collaborated with the CALLSIGN and KONG teams to stabilize the environment. Subsequently, we were able to generate logs from the middleware team. Below are the logs:
+
+Naveen Gupta, please review the logs. If any support is required, please connect with us.
+
+Logs:
+
+Timestamp: Jun 21, 2024 @ 14:33:44.244
+
+Transaction ID: trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5
+
+Service: simSwapStatus
+
+Log Level: INFO
+
+Service Request: {"applicationArea":{"transactionId":"trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5"}}
+
+Timestamp: Jun 21, 2024 @ 14:33:44.249
+
+Transaction ID: trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5
+
+Service: simSwapStatus
+
+Log Level: INFO
+
+Service Response: 400 BAD_REQUEST {"applicationArea":{"transactionId":"trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5"},"responseStatus":{"status":"ERROR","errorDetails":[{"errorCode":"GEN8003","errorDesc":"Missing Mandatory fields in Request payload"}]}}
+
+2. Payload Format Update:
+After modifying the request payload format by Callsign, the updated structure is as follows:
+
+json
+Copy code
+{
+    "transaction": {
+        "additionalTransactionInformation": {
+            "channel": "MOB",
+            "phoneNumber": "0504972291",
+            "countryOfOrigin": "AE",
+            "transactionDateTime": "2024-06-21T09:00:45.043Z",
+            "referenceDate": "2024-06-21 03:12:02.751"
+        }
+    }
+}
+Despite this modification, Callsign's request is still not being received by the middleware, and they have indicated that the request is in an invalid JSON format, preventing them from providing the request.
+
+3. Connectivity Issue:
+The endpoint https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status is currently not functioning from Postman due to connectivity issues with Etisalat, as reported by Prasant.
+
 return getWebClient(finalUrl, false).method(httpMethod).uri(finalUrl)
 				.headers(header -> header.putAll(headers)).body(BodyInserters.fromValue(xmlRequest))
 				.exchangeToMono(clientResponse -> processResponse(serviceName, finalUrl, headers, t1, clientResponse))
