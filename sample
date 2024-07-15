@@ -1,4 +1,29 @@
-		return getWebClient(finalUrl, false).method(httpMethod).uri(finalUrl)
+1)Callsign whitelisted the mw risk endpoint: https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status  from Akhaya and after we have trigger the etg reqyest and mw team given us the req/res and we repoted to team  
+ 
+ 
+below is the update:
+We worked with CALLSIGN and KONG team to stabilize the environment.
+Post that able to generate logs from middleware team. Below are the logs
+Naveen Gupta please check. If any support required connect with us Thanks Sanjib Mohanty
+Jun 21, 2024 @ 14:33:44.244	trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5, simSwapStatus	INFO	Service Request: {"applicationArea":{"transactionId":"trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5"}}
+
+Jun 21, 2024 @ 14:33:44.249	trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5, simSwapStatus	INFO	Service Response: 400 BAD_REQUEST {"applicationArea":{"transactionId":"trn-p2kg9mwp-0sps3t5r-9ncf25tma-4psbcgd5"},"responseStatus":{"status":"ERROR","errorDetails":[{"errorCode":"GEN8003","errorDesc":"Missing Mandatory fields in Request payload"}]}}
+ 
+ 
+ 
+2) After changing the request payload fromat by callsign :   "transaction": {
+                    "additionalTransactionInformation": {
+                        "channel": "MOB",
+                        "phoneNumber": "0504972291",
+                        "countryOfOrigin": "AE",
+                        "transactionDateTime": "2024-06-21T09:00:45.043Z",
+                        "referenceDate": "2024-06-21 03:12:02.751"
+                    }
+                } 
+				Still callsign request is not recieved in mw and they are saying the request is invalid josn format that is why they r not able to provide request 
+3)https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status   ---------its not working from postman as Etislat connectivity  issue As per Prasant
+
+return getWebClient(finalUrl, false).method(httpMethod).uri(finalUrl)
 				.headers(header -> header.putAll(headers)).body(BodyInserters.fromValue(xmlRequest))
 				.exchangeToMono(clientResponse -> processResponse(serviceName, finalUrl, headers, t1, clientResponse))
 				.contextCapture()
