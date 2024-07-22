@@ -1,3 +1,53 @@
+List<SegmentUploadData> segmentUploadData = new ArrayList<SegmentUploadData>();
+			String[] splitted = Arrays.stream(str.split("\n")).map(String::trim).toArray(String[]::new);
+			List<String> list = Arrays.asList(splitted);
+
+			for (String lineStr : list) {
+				//String[] line = Arrays.stream(lineStr.split(",")).map(String::trim).toArray(String[]::new);
+				String[] line = parseCsvLine(lineStr);
+				if(ArrayUtils.isNotEmpty(line)) {
+				  List<String> splittedLine = Arrays.asList(line);
+				  SegmentUploadData uploadData = new SegmentUploadData();
+				  for(int index=0;index<splittedLine.size();index++){
+					switch(index){
+					case 0:
+						uploadData.setData(splittedLine.get(0).replace("\"", ""));
+						// PRM-2709: FAB_Admin_Elig_file_seg_file_upload_issue with incorrect CIN
+						if(uploadData.getData().length()>100) {
+							log.info("length is greater than 100");
+							throw new AppException(ErrorCodes.INCORRECT_SEGMENT_DATA);
+						}
+						break;
+					case 1:
+						uploadData.setAttr1(splittedLine.get(1));
+						break;
+					case 2:
+						uploadData.setAttr2(splittedLine.get(2));
+						break;
+					case 3:
+						uploadData.setAttr3(splittedLine.get(3));
+						break;
+					case 4:
+						uploadData.setAttr4(splittedLine.get(4));
+						break;
+					case 5:
+						uploadData.setAttr5(splittedLine.get(5));
+						break;
+					case 6:
+						uploadData.setAttr6(splittedLine.get(6));
+						break;
+					case 7:
+						uploadData.setAttr7(splittedLine.get(7));
+						break;
+					default:
+						break;
+					}
+				}
+				segmentUploadData.add(uploadData);
+			  }
+			}
+
+
 1)Callsign whitelisted the mw risk endpoint: https://kproxy-uat.risk-middleware-dev.aeapps.bankfab.com/ae/core/sim-swap/v1/sim/swap/status  from Akhaya and after we have trigger the etg reqyest and mw team given us the req/res and we repoted to team  
  
  
