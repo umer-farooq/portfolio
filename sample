@@ -1,3 +1,53 @@
+List<SegmentUploadData> segmentUploadData = new ArrayList<>();
+
+    CSVFormat format = CSVFormat.DEFAULT.withQuote('"');
+
+    try (CSVParser parser = CSVParser.parse(new StringReader(str), format)) {
+        segmentUploadData = StreamSupport.stream(parser.spliterator(), false)
+            .map(record -> {
+                SegmentUploadData uploadData = new SegmentUploadData();
+    
+                for (int index = 0; index < record.size(); index++) {
+                    switch (index) {
+                        case 0:
+                            uploadData.setData(record.get(0).replace("\"", ""));
+                            if (uploadData.getData().length() > 100) {
+                                log.info("length is greater than 100");
+                                throw new AppException(ErrorCodes.INCORRECT_SEGMENT_DATA);
+                            }
+                            break; // Added break
+
+                        case 1:
+                            uploadData.setAttr1(record.get(1));
+                            break;
+                        case 2:
+                            uploadData.setAttr2(record.get(2));
+                            break;
+                        case 3:
+                            uploadData.setAttr3(record.get(3));
+                            break;
+                        case 4:
+                            uploadData.setAttr4(record.get(4));
+                            break;
+                        case 5:
+                            uploadData.setAttr5(record.get(5));
+                            break;
+                        case 6:
+                            uploadData.setAttr6(record.get(6));
+                            break;
+                        case 7:
+                            uploadData.setAttr7(record.get(7));
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                return uploadData;
+            })
+            .collect(Collectors.toList());
+    }
+
 List<SegmentUploadData> segmentUploadData = new ArrayList<SegmentUploadData>();
 			String[] splitted = Arrays.stream(str.split("\n")).map(String::trim).toArray(String[]::new);
 			List<String> list = Arrays.asList(splitted);
