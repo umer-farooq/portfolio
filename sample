@@ -1,4 +1,10 @@
-	at org.apache.commons.csv.CSVParser$CSVRecordIterator.getNextRecord(CSVParser.java:149)
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.11.0</version>
+    </dependency>
+
+        at org.apache.commons.csv.CSVParser$CSVRecordIterator.getNextRecord(CSVParser.java:149)
 	at org.apache.commons.csv.CSVParser$CSVRecordIterator.hasNext(CSVParser.java:158)
 	at java.base/java.util.Iterator.forEachRemaining(Iterator.java:132)
 	at java.base/java.util.Spliterators$IteratorSpliterator.forEachRemaining(Spliterators.java:1845)
