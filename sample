@@ -1,3 +1,4 @@
+3605561,"1,000"
 Invalid char between encapsulated token and delimiter at line: 1, position: 16
 try (CSVParser parser = CSVParser.parse(new StringReader(str), format)) {
             for (CSVRecord record : parser) {
