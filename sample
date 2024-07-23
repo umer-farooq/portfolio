@@ -1,3 +1,14 @@
+	at org.apache.commons.csv.CSVParser$CSVRecordIterator.getNextRecord(CSVParser.java:149)
+	at org.apache.commons.csv.CSVParser$CSVRecordIterator.hasNext(CSVParser.java:158)
+	at java.base/java.util.Iterator.forEachRemaining(Iterator.java:132)
+	at java.base/java.util.Spliterators$IteratorSpliterator.forEachRemaining(Spliterators.java:1845)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ReduceOps$ReduceOp.evaluateSequential(ReduceOps.java:921)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.collect(ReferencePipeline.java:682)
+	at com.fab.pb.helpers.pdfprocessor.PdfHelper.main(PdfHelper.java:348)
+Caused by: java.lang.ClassNotFoundException: org.apache.commons.io.function.Uncheck
 <dependency>
     <groupId>org.apache.commons</groupId>
     <artifactId>commons-csv</artifactId>
