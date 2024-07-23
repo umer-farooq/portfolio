@@ -1,4 +1,53 @@
-    <dependency>
+try (CSVParser parser = CSVParser.parse(new StringReader(str), format)) {
+            for (CSVRecord record : parser) {
+                SegmentUploadData uploadData = new SegmentUploadData();
+
+                for (int index = 0; index < record.size(); index++) {
+                    String field = record.get(index);
+                    validateField(field);
+
+                    switch (index) {
+                        case 0:
+                            uploadData.setData(field.replace("\"", ""));
+                            if (uploadData.getData().length() > 100) {
+                                log("length is greater than 100");
+                                throw new AppException(ErrorCodes.INCORRECT_SEGMENT_DATA);
+                            }
+                            break;
+                        case 1:
+                            uploadData.setAttr1(field);
+                            break;
+                        case 2:
+                            uploadData.setAttr2(field);
+                            break;
+                        case 3:
+                            uploadData.setAttr3(field);
+                            break;
+                        case 4:
+                            uploadData.setAttr4(field);
+                            break;
+                        case 5:
+                            uploadData.setAttr5(field);
+                            break;
+                        case 6:
+                            uploadData.setAttr6(field);
+                            break;
+                        case 7:
+                            uploadData.setAttr7(field);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                segmentUploadData.add(uploadData);
+            }
+        } catch (IOException e) {
+            throw new AppException(ErrorCodes.SYS_INTERNAL_ERROR, e);
+        }
+
+
+
+<dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-io</artifactId>
         <version>2.11.0</version>
