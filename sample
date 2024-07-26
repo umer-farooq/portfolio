@@ -1,4 +1,17 @@
-   try (CSVReader reader = new CSVReader(new StringReader(str))) {
+1. All the Npss related functionality needs to be disabled.
+    IPP: Enable IPP Account to Account transfer for MB
+    IPP: Enable IPP Account to Account transfer for IB
+    NPSS Aani Overlay Roll out Enable(Y)/Disable(N)
+
+2. DB Migration scripts needs to be executed by optimus team
+
+3. Stop G42 Services all 4 services	
+     npss-sca
+	 npss-enrollment
+	 npss-payment
+	 npss-notification
+
+try (CSVReader reader = new CSVReader(new StringReader(str))) {
             return reader.readAll().stream()
                 .map(this::createSegmentUploadData)
                 .collect(Collectors.toList());
