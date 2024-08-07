@@ -1,3 +1,24 @@
+CREATE TABLE IBMBUSER.WATCH_REGISTRATION_DETAILS (
+ 
+    CONVID     		    VARCHAR2(100 CHAR),	
+	MOBILE_DEVICE_ID    VARCHAR2(50 CHAR),
+	WATCH_DEVICE_ID     VARCHAR2(50 CHAR),
+    DEVICE_MODLE        VARCHAR2(100 CHAR),
+	DEVICE_MAKE        	VARCHAR2(100 CHAR),
+	DEVICE_NAME         VARCHAR2(100 CHAR),
+	WATCH_IMEI          VARCHAR2(50 CHAR),
+    CREATED_BY			VARCHAR2(100 CHAR),
+	CREATED_ON			TIMESTAMP,
+    MODIFIED_BY			VARCHAR2(100 CHAR),
+    MODIFIED_ON			TIMESTAMP,
+    STATUS              VARCHAR2(50 CHAR),
+    DEACTIVATE_DATE     TIMESTAMP,
+    CIF                 VARCHAR2(50 CHAR),
+    CIN                 VARCHAR2(50 CHAR),
+   	PRIMARY KEY(CONVID)
+   );
+
+
 1. All the Npss related functionality needs to be disabled.
     IPP: Enable IPP Account to Account transfer for MB
     IPP: Enable IPP Account to Account transfer for IB
