@@ -1,22 +1,40 @@
-CREATE TABLE IBMBUSER.WATCH_REGISTRATION_DETAILS (
- 
-    CONVID     		    VARCHAR2(100 CHAR),	
-	MOBILE_DEVICE_ID    VARCHAR2(50 CHAR),
-	WATCH_DEVICE_ID     VARCHAR2(50 CHAR),
-    DEVICE_MODLE        VARCHAR2(100 CHAR),
-	DEVICE_MAKE        	VARCHAR2(100 CHAR),
-	DEVICE_NAME         VARCHAR2(100 CHAR),
-	WATCH_IMEI          VARCHAR2(50 CHAR),
-    CREATED_BY			VARCHAR2(100 CHAR),
-	CREATED_ON			TIMESTAMP,
-    MODIFIED_BY			VARCHAR2(100 CHAR),
-    MODIFIED_ON			TIMESTAMP,
-    STATUS              VARCHAR2(50 CHAR),
-    DEACTIVATE_DATE     TIMESTAMP,
-    CIF                 VARCHAR2(50 CHAR),
-    CIN                 VARCHAR2(50 CHAR),
-   	PRIMARY KEY(CONVID)
-   );
+# Method is used to send email
+def send_mail(csv_data_in_bytes, s3_file_name):
+    if csv_data_in_bytes is not None:
+        currectDate = datetime.now().date()
+        email_subject = "Sanctioned country report_" + currectDate.strftime("%Y-%m-%d")
+        split_array = s3_file_name.split('/')
+        s3_file_name=split_array[-1]
+        s3_file_name = s3_file_name.replace(':','_')
+        url= os.environ['SEND_EMAIL_SERVICE_URL']
+        headers = {'XREF': str(uuid.uuid4()), 'CHANNELID': 'AWS','content-type':'application/json'}
+        data = {
+        "sourceSystem": "FAB", 
+        "requestID": str(uuid.uuid4()), 
+        "fromAddress": "noreply@bankfab.com", 
+        "entityName": "FAB", 
+        "toAddress": [os.environ['TO_ADDRESS']], 
+        "emailSubject": email_subject, 
+        "emailBodyContent": "", 
+        "emailBodyContentType": "TEXT",
+        "attachment": [{
+            "attachementBytes": str(csv_data_in_bytes.decode("utf-8")), 
+            "mimeType": "application/csv",
+            "fileName": s3_file_name 
+        }]
+        }
+
+        data = json.dumps(data)
+        response = httpx.post(url,headers=headers, data=data, verify = sslcontext)
+        if response.status_code == 200:
+            logger.info("Email sent successfully")
+        else:
+            logger.info(f"failed to send email. status code : {response.status_code}")
+        logger.info(f'Email API Response : {response.text}')
+    else:
+        logger.info("csv_data_in_bytes is null.")
+    
+
 
 -- Adding indexes
 CREATE INDEX IDX_MOBILE_DEVICE_ID ON IBMBUSER.WATCH_REGISTRATION_DETAILS (MOBILE_DEVICE_ID);
