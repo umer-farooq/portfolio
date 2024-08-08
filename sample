@@ -1,3 +1,16 @@
+Yes, you can set multiple email addresses in the os.environ['TO_ADDRESS'] field and modify the send_mail function to handle multiple recipients. You can store multiple email addresses in the TO_ADDRESS environment variable separated by a delimiter (e.g., comma) and then split this string into a list in the function.
+
+Here’s how you can modify your function:
+
+Store multiple email addresses in the TO_ADDRESS environment variable, separated by commas.
+Split the TO_ADDRESS string into a list inside the function.
+
+import os
+import json
+import uuid
+from datetime import datetime
+import httpx
+
 # Method is used to send email
 def send_mail(csv_data_in_bytes, s3_file_name):
     if csv_data_in_bytes is not None:
@@ -6,34 +19,37 @@ def send_mail(csv_data_in_bytes, s3_file_name):
         split_array = s3_file_name.split('/')
         s3_file_name=split_array[-1]
         s3_file_name = s3_file_name.replace(':','_')
-        url= os.environ['SEND_EMAIL_SERVICE_URL']
-        headers = {'XREF': str(uuid.uuid4()), 'CHANNELID': 'AWS','content-type':'application/json'}
+        url = os.environ['SEND_EMAIL_SERVICE_URL']
+        headers = {'XREF': str(uuid.uuid4()), 'CHANNELID': 'AWS', 'content-type': 'application/json'}
+
+        # Split the TO_ADDRESS environment variable into a list of email addresses
+        to_address_list = os.environ['TO_ADDRESS'].split(',')
+
         data = {
-        "sourceSystem": "FAB", 
-        "requestID": str(uuid.uuid4()), 
-        "fromAddress": "noreply@bankfab.com", 
-        "entityName": "FAB", 
-        "toAddress": [os.environ['TO_ADDRESS']], 
-        "emailSubject": email_subject, 
-        "emailBodyContent": "", 
-        "emailBodyContentType": "TEXT",
-        "attachment": [{
-            "attachementBytes": str(csv_data_in_bytes.decode("utf-8")), 
-            "mimeType": "application/csv",
-            "fileName": s3_file_name 
-        }]
+            "sourceSystem": "FAB",
+            "requestID": str(uuid.uuid4()),
+            "fromAddress": "noreply@bankfab.com",
+            "entityName": "FAB",
+            "toAddress": to_address_list,
+            "emailSubject": email_subject,
+            "emailBodyContent": "",
+            "emailBodyContentType": "TEXT",
+            "attachment": [{
+                "attachementBytes": str(csv_data_in_bytes.decode("utf-8")),
+                "mimeType": "application/csv",
+                "fileName": s3_file_name
+            }]
         }
 
         data = json.dumps(data)
-        response = httpx.post(url,headers=headers, data=data, verify = sslcontext)
+        response = httpx.post(url, headers=headers, data=data, verify=sslcontext)
         if response.status_code == 200:
             logger.info("Email sent successfully")
         else:
-            logger.info(f"failed to send email. status code : {response.status_code}")
-        logger.info(f'Email API Response : {response.text}')
+            logger.info(f"Failed to send email. Status code: {response.status_code}")
+        logger.info(f'Email API Response: {response.text}')
     else:
         logger.info("csv_data_in_bytes is null.")
-    
 
 
 -- Adding indexes
