@@ -1,3 +1,345 @@
+set define off;
+
+CREATE OR REPLACE PACKAGE "IBMBUSER.IBMB_ARCHIVE_PKG" 
+AS
+PROCEDURE ARCHVICE_EVENT;
+PROCEDURE ARCHVICE_NOTIFICATION;
+PROCEDURE ARCHVICE_PUSH_NOTI_AUDIT;
+PROCEDURE ARCHVICE_SEGMENT_UPLOAD_FILE;
+PROCEDURE ARCHVICE_PAGE_VIEW_REPORT;
+PROCEDURE ARCHVICE_CA_REQUEST_AUDIT;
+PROCEDURE ARCHIVE_CS_TRANSACTION_AUDIT;
+END; 
+
+/
+create or replace PACKAGE BODY "IBMB_ARCHIVE_PKG" 
+IS
+   PROCEDURE ARCHVICE_EVENT 
+   IS
+     CURSOR c_archiveData IS
+		SELECT * FROM IBMBUSER.EVENT@ARCH_CIDB_IBMB WHERE CREATED_DATE <= add_months(sysdate, -3);
+	TYPE t_data IS TABLE OF  c_archiveData%ROWTYPE;
+	chunk_size CONSTANT INTEGER :=100000;
+	l_data t_data;
+	lc_out  VARCHAR2(512);
+    reccount NUMBER;
+    totalRecords NUMBER;
+   BEGIN
+	OPEN c_archiveData;
+    totalRecords := 0;
+    LOOP
+      BEGIN
+            FETCH c_archiveData BULK COLLECT INTO l_data LIMIT chunk_size;
+            reccount := l_data.COUNT;
+            totalRecords := totalRecords + reccount;
+            FORALL i IN 1..reccount
+                INSERT INTO IBMBARCHIVE.EVENT_ARCHIVE(EVENT_ID,EVENT_TYPE,CIN,CIF,STATUS,PARAM1,PARAM2,PARAM3,PARAM4,PARAM5,CREATED_BY,
+				CREATED_DATE,MODIFIED_BY,MODIFIED_DATE,OCCURRENCE,FREQUENCY,DEVICE_ID) 
+                VALUES
+                (l_data(i).EVENT_ID,l_data(i).EVENT_TYPE,l_data(i).CIN,l_data(i).CIF,l_data(i).STATUS,l_data(i).PARAM1,l_data(i).PARAM2,l_data(i).PARAM3,l_data(i).PARAM4,l_data(i).PARAM5,
+                l_data(i).CREATED_BY,l_data(i).CREATED_DATE,l_data(i).MODIFIED_BY,l_data(i).MODIFIED_DATE,l_data(i).OCCURRENCE,l_data(i).FREQUENCY,
+                l_data(i).DEVICE_ID);
+            lc_out := 'INS';
+            FOR i IN 1..reccount
+				LOOP
+                  DELETE FROM IBMBUSER.EVENT@ARCH_CIDB_IBMB WHERE EVENT_ID = l_data(i).EVENT_ID;
+				END LOOP;
+            lc_out := lc_out || '-DEL-';
+            IF SQL%FOUND THEN
+                lc_out := lc_out || 'SUCCESS';
+                INSERT INTO IBMB_ARCHIVE_AUDIT (TBL_NAME, RECOUNT, STATUS,ERR_TEXT) VALUES ('EVENT',reccount,'1',lc_out);
+                COMMIT;
+            END IF;
+            EXIT WHEN c_archiveData%NOTFOUND;
+        EXCEPTION
+            WHEN OTHERS
+            THEN
+                ROLLBACK;
+                lc_out := lc_out || 'Error:' || SQLERRM;
+				totalRecords := totalRecords - reccount;
+                INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('EVENT',reccount,'0',lc_out);
+                COMMIT;
+        END;
+	END LOOP;
+	CLOSE c_archiveData;
+    INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('EVENT',totalRecords,'1','JOB_COMPLETED');
+    COMMIT;
+   END ARCHVICE_EVENT;
+
+PROCEDURE ARCHVICE_NOTIFICATION
+   IS
+	CURSOR c_archiveData IS
+		SELECT * FROM IBMBUSER.NOTIFICATION@ARCH_CIDB_IBMB WHERE CREATED_ON <= add_months(sysdate, -6);
+	TYPE t_data IS TABLE OF  c_archiveData%ROWTYPE;
+	chunk_size CONSTANT INTEGER :=100000;
+	l_data t_data;
+	lc_out  VARCHAR2(512);
+    reccount NUMBER;
+	totalRecords NUMBER;
+
+
+BEGIN
+	totalRecords := 0;
+	OPEN c_archiveData;
+		LOOP
+			BEGIN
+            FETCH c_archiveData BULK COLLECT INTO l_data LIMIT chunk_size;
+            reccount := l_data.COUNT;
+			totalRecords := totalRecords + reccount;
+            FORALL i IN 1..reccount
+                INSERT INTO IBMBARCHIVE.NOTIFICATION_ARCHIVE(NOTIFICATION_ID,CIF,TITTLE,MESSAGE,CATEGORY,ACTION,ACTION_LABEL,ACTION_URL,READ_STATUS,DELIVERY_METHOD,
+				DELIVERY_STATUS,CREATED_BY,CREATED_ON,MODIFIED_BY,MODIFIED_ON,SOURCE_TYPE,PARENT_ID,ERROR_CODE,ERROR_DESC,EVENT_TYPE,EXPIRY_DATE,LOCALE,ANDROID_IMAGE,
+				IOS_MEDIA,REFERENCE_ID,TEMPLATE_TYPE,SUPRESSION_TYPE,CONTENT_PATH) 
+                VALUES
+                (l_data(i).NOTIFICATION_ID,l_data(i).CIF,l_data(i).TITTLE,l_data(i).MESSAGE,l_data(i).CATEGORY,l_data(i).ACTION,l_data(i).ACTION_LABEL,l_data(i).ACTION_URL,l_data(i).READ_STATUS,
+                l_data(i).DELIVERY_METHOD,l_data(i).DELIVERY_STATUS,l_data(i).CREATED_BY,l_data(i).CREATED_ON,l_data(i).MODIFIED_BY,l_data(i).MODIFIED_ON,l_data(i).SOURCE_TYPE,l_data(i).PARENT_ID,
+                l_data(i).ERROR_CODE,l_data(i).ERROR_DESC,l_data(i).EVENT_TYPE,l_data(i).EXPIRY_DATE,l_data(i).LOCALE,l_data(i).ANDROID_IMAGE,l_data(i).IOS_MEDIA,l_data(i).REFERENCE_ID,l_data(i).TEMPLATE_TYPE,
+                l_data(i).SUPRESSION_TYPE,l_data(i).CONTENT_PATH);
+            lc_out := 'INS';
+            FOR i IN 1..reccount
+				LOOP
+                  DELETE FROM IBMBUSER.NOTIFICATION@ARCH_CIDB_IBMB WHERE NOTIFICATION_ID = l_data(i).NOTIFICATION_ID;
+				END LOOP;
+            lc_out := lc_out || '-DEL-';
+            IF SQL%FOUND THEN
+                lc_out := lc_out || 'SUCCESS';
+                INSERT INTO IBMB_ARCHIVE_AUDIT (TBL_NAME, RECOUNT, STATUS,ERR_TEXT) VALUES ('NOTIFICATION',reccount,'1',lc_out);
+                COMMIT;
+            END IF;
+            EXIT WHEN c_archiveData%NOTFOUND;
+        EXCEPTION
+            WHEN OTHERS
+            THEN
+                ROLLBACK;
+                lc_out := lc_out || 'Error:' || SQLERRM;
+				totalRecords := totalRecords - reccount;
+                INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('NOTIFICATION',reccount,'0',lc_out);
+                COMMIT;
+        END;
+	END LOOP;
+	CLOSE c_archiveData;
+	INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('NOTIFICATION',totalRecords,'1','JOB_COMPLETED');
+    COMMIT;
+
+END ARCHVICE_NOTIFICATION;
+
+PROCEDURE ARCHVICE_PUSH_NOTI_AUDIT 
+   IS
+    CURSOR c_archiveData IS
+		SELECT * FROM IBMBUSER.PUSH_NOTIFICATION_AUDIT@ARCH_CIDB_IBMB WHERE CREATION_DATE <= add_months(sysdate, -3);
+    TYPE t_data IS TABLE OF  c_archiveData%ROWTYPE;
+	chunk_size CONSTANT INTEGER :=100000;
+	l_data t_data;
+	lc_out  VARCHAR2(512);
+    reccount NUMBER; 
+	totalRecords NUMBER;	
+  BEGIN
+    totalRecords := 0;
+	OPEN c_archiveData;
+	LOOP
+        BEGIN
+            FETCH c_archiveData BULK COLLECT INTO l_data LIMIT chunk_size;
+            reccount := l_data.COUNT;
+			totalRecords := totalRecords + reccount;
+            FORALL i IN 1..reccount
+                INSERT INTO IBMBARCHIVE.PUSH_NOTI_AUDIT_ARCHIVE(ID, SEGMENT_ID, CAMPAIGN_ID, DEVICE_ID,CREATION_DATE, NOTIFIED_DATE, STATUS, ERROR_CODE, ERROR_DESC, CIF, CIN,TITTLE,MESSAGE,
+                ACTION,ACTION_URL,SOURCE_TYPE,PARENT_ID,TOKEN,EVENT_TYPE,LOCALE, ANDROID_IMAGE, IOS_MEDIA, DEVICE_TYPE)
+                VALUES (l_data(i).ID,l_data(i).SEGMENT_ID,l_data(i).CAMPAIGN_ID,l_data(i).DEVICE_ID,l_data(i).CREATION_DATE,l_data(i).NOTIFIED_DATE,l_data(i).STATUS,l_data(i).ERROR_CODE,l_data(i).ERROR_DESC,
+                l_data(i).CIF,l_data(i).CIN,l_data(i).TITTLE,l_data(i).MESSAGE,l_data(i).ACTION,l_data(i).ACTION_URL,l_data(i).SOURCE_TYPE,l_data(i).PARENT_ID,l_data(i).TOKEN,l_data(i).EVENT_TYPE,l_data(i).LOCALE,l_data(i).ANDROID_IMAGE,l_data(i).IOS_MEDIA,l_data(i).DEVICE_TYPE);
+            lc_out := 'INS';
+            FOR i IN 1..reccount
+			 LOOP
+                 DELETE FROM IBMBUSER.PUSH_NOTIFICATION_AUDIT@ARCH_CIDB_IBMB WHERE ID = l_data(i).ID;
+		     END LOOP;
+            lc_out := lc_out || '-DEL-';
+            IF SQL%FOUND THEN
+                lc_out := lc_out || 'SUCCESS';
+                INSERT INTO ibmb_archive_audit (TBL_NAME, RECOUNT, STATUS,ERR_TEXT) VALUES ('PUSH_NOTIFICATION_AUDIT',reccount,'1',lc_out);
+                COMMIT;
+            END IF;
+            EXIT WHEN c_archiveData%NOTFOUND;
+        EXCEPTION
+            WHEN OTHERS
+            THEN
+                ROLLBACK;
+				totalRecords := totalRecords - reccount;
+                lc_out := lc_out || 'Error:' || SQLERRM;
+                INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('PUSH_NOTIFICATION_AUDIT',reccount,'0',lc_out);
+                COMMIT;
+        END;
+	END LOOP;
+	CLOSE c_archiveData;
+	INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('PUSH_NOTIFICATION_AUDIT',totalRecords,'1','JOB_COMPLETED');
+    COMMIT;
+
+END ARCHVICE_PUSH_NOTI_AUDIT;
+
+PROCEDURE ARCHVICE_SEGMENT_UPLOAD_FILE
+   IS
+      reccount      NUMBER;
+      lc_out        VARCHAR2(512);
+   BEGIN
+
+       SELECT COUNT(1) INTO reccount FROM IBMBUSER.SEGMENT_UPLOAD_FILE@ARCH_CIDB_IBMB WHERE UPLOADED_DATE <= add_months(sysdate, -6);
+
+       INSERT INTO IBMBARCHIVE.SEGMENT_UPLOAD_FILE_ARCHIVE SELECT * FROM IBMBUSER.SEGMENT_UPLOAD_FILE@ARCH_CIDB_IBMB WHERE UPLOADED_DATE <= add_months(sysdate, -6);
+       lc_out := 'INS';
+       IF reccount = SQL%ROWCOUNT THEN
+         DELETE FROM IBMBUSER.SEGMENT_UPLOAD_FILE@ARCH_CIDB_IBMB WHERE UPLOADED_DATE <= add_months(sysdate, -6);
+         lc_out := lc_out || '-DEL-';
+         IF SQL%FOUND THEN
+           lc_out := lc_out || 'SUCCESS';
+           INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS,ERR_TEXT )  VALUES('SEGMENT_UPLOAD_FILE',reccount,'1',lc_out);
+           COMMIT;
+         END IF;
+       END IF;
+	   INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS,ERR_TEXT )  VALUES('SEGMENT_UPLOAD_FILE',reccount,'1','JOB_COMPLETED');
+       COMMIT;
+
+   EXCEPTION
+      WHEN OTHERS
+      THEN
+         ROLLBACK;
+         lc_out := lc_out || 'Error:' || SQLERRM;
+         INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('SEGMENT_UPLOAD_FILE',reccount,'0',lc_out);
+         COMMIT;
+   END ARCHVICE_SEGMENT_UPLOAD_FILE;
+
+PROCEDURE ARCHVICE_PAGE_VIEW_REPORT
+   IS
+    CURSOR c_archiveData IS
+		SELECT * FROM IBMBUSER.PAGE_VIEW_REPORT@ARCH_CIDB_IBMB WHERE TRUNC(CREATION_TIME) <= TRUNC(sysdate -1);
+    TYPE t_data IS TABLE OF  c_archiveData%ROWTYPE;
+	chunk_size CONSTANT INTEGER :=200000;
+	l_data t_data;
+	lc_out  VARCHAR2(512);
+    reccount NUMBER;
+	totalRecords NUMBER;
+
+   BEGIN
+    totalRecords := 0;
+	OPEN c_archiveData;
+	LOOP
+        BEGIN
+            FETCH c_archiveData BULK COLLECT INTO l_data LIMIT chunk_size;
+            reccount := l_data.COUNT;
+			totalRecords := totalRecords + reccount;
+            FORALL i IN 1..reccount
+                INSERT INTO IBMBARCHIVE.PAGE_VIEW_REPORT_ARCHIVE(ID, CIF,CIN,CHANNEL_ID,PAGE,CREATION_TIME,RC,IP,HOSTNAME,COMPLETION_TIME,API_STATUS,API_ERRORCODE,HTTP_STATUS,HTTP_ERRORCODE,HTTP_ERRORDESC,REMOTE_IP) 
+				VALUES (l_data(i).ID, l_data(i).CIF,l_data(i).CIN,l_data(i).CHANNEL_ID,l_data(i).PAGE,l_data(i).CREATION_TIME,l_data(i).RC,l_data(i).IP,l_data(i).HOSTNAME,l_data(i).COMPLETION_TIME,l_data(i).API_STATUS,l_data(i).API_ERRORCODE,l_data(i).HTTP_STATUS,l_data(i).HTTP_ERRORCODE,l_data(i).HTTP_ERRORDESC,l_data(i).REMOTE_IP); -- use columns name
+            lc_out := 'INS';
+            FOR i IN 1..reccount
+			  LOOP
+                 DELETE FROM IBMBUSER.PAGE_VIEW_REPORT@ARCH_CIDB_IBMB WHERE ID = l_data(i).ID;
+			  END LOOP;
+            lc_out := lc_out || '-DEL-';
+            IF SQL%FOUND THEN
+                lc_out := lc_out || 'SUCCESS';
+                INSERT INTO ibmb_archive_audit (TBL_NAME, RECOUNT, STATUS,ERR_TEXT) VALUES ('PAGE_VIEW_REPORT',reccount,'1',lc_out);
+                COMMIT;
+            END IF;
+            EXIT WHEN c_archiveData%NOTFOUND;
+        EXCEPTION
+            WHEN OTHERS
+            THEN
+                ROLLBACK;
+                lc_out := lc_out || 'Error:' || SQLERRM;
+				totalRecords := totalRecords - reccount;
+                INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('PAGE_VIEW_REPORT',reccount,'0',lc_out);
+                COMMIT;
+        END;
+	END LOOP;
+	CLOSE c_archiveData;
+	INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('PAGE_VIEW_REPORT',totalRecords,'1','JOB_COMPLETED');
+    COMMIT;
+END ARCHVICE_PAGE_VIEW_REPORT; 
+
+PROCEDURE ARCHVICE_CA_REQUEST_AUDIT 
+   IS
+      reccount      NUMBER;
+      lc_out        VARCHAR2(512);
+   BEGIN
+
+       SELECT COUNT(1) INTO reccount FROM IBMBUSER.CA_REQUEST_AUDIT@ARCH_CIDB_IBMB  WHERE  TRUNC(CREATE_DATE) <= TRUNC(sysdate -1);
+
+       INSERT INTO IBMBARCHIVE.CA_REQUEST_AUDIT_ARCHIVE SELECT * FROM IBMBUSER.CA_REQUEST_AUDIT@ARCH_CIDB_IBMB WHERE TRUNC(CREATE_DATE) <= TRUNC(sysdate -1);
+       lc_out := 'INS';
+       IF reccount = SQL%ROWCOUNT THEN
+         DELETE FROM IBMBUSER.CA_REQUEST_AUDIT@ARCH_CIDB_IBMB WHERE TRUNC(CREATE_DATE) <= TRUNC(sysdate -1);
+         lc_out := lc_out || '-DEL-';
+         IF SQL%FOUND THEN
+           lc_out := lc_out || 'SUCCESS';
+           INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS,ERR_TEXT )  VALUES('CA_REQUEST_AUDIT',reccount,'1',lc_out);
+           COMMIT;
+         END IF;
+       END IF;
+   EXCEPTION
+      WHEN OTHERS
+      THEN
+         ROLLBACK;
+         lc_out := lc_out || 'Error:' || SQLERRM;
+         INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('CA_REQUEST_AUDIT',reccount,'0',lc_out);
+         COMMIT;
+   END ARCHVICE_CA_REQUEST_AUDIT;
+   
+   PROCEDURE ARCHIVE_CS_TRANSACTION_AUDIT
+   IS
+    CURSOR c_archiveData IS
+		SELECT * FROM IBMBUSER.CS_TRANSACTION_AUDIT@ARCH_CIDB_IBMB WHERE TRUNC(CREATION_TIME) <= TRUNC(sysdate -3);
+    TYPE t_data IS TABLE OF  c_archiveData%ROWTYPE;
+	chunk_size CONSTANT INTEGER :=200000;
+	l_data t_data;
+	lc_out  VARCHAR2(512);
+    reccount NUMBER;
+	totalRecords NUMBER;
+
+   BEGIN
+    totalRecords := 0;
+	OPEN c_archiveData;
+	LOOP
+        BEGIN
+            FETCH c_archiveData BULK COLLECT INTO l_data LIMIT chunk_size;
+            reccount := l_data.COUNT;
+			totalRecords := totalRecords + reccount;
+            FORALL i IN 1..reccount
+                INSERT INTO IBMBARCHIVE.CS_TRANSACTION_AUDIT_ARCHIVE(CONVID,SESSIONID,RC,CIN,CIF,STATUS,CHANNEL,CREATION_TIME,PATH,TRANSACTION_ID,TRANSACTION_TYPE,RESULT,REQUIREMENT_ID,DECISION_ID,DECISION,REQUEST_AUTHENTICATOR,RESPONSE_AUTHENTICATOR,MESSAGE,SDK_ERROR_CODE,SDK_ERROR_MESSAGE,ID,MODIFY_DATE,APP_VERSION)
+				VALUES (l_data(i).CONVID, l_data(i).SESSIONID,
+				l_data(i).RC,l_data(i).CIN,l_data(i).CIF,l_data(i).STATUS,l_data(i).CHANNEL,l_data(i).CREATION_TIME,l_data(i).PATH,l_data(i).TRANSACTION_ID,l_data(i).TRANSACTION_TYPE,l_data(i).RESULT,l_data(i).REQUIREMENT_ID,l_data(i).DECISION_ID,l_data(i).DECISION,l_data(i).REQUEST_AUTHENTICATOR,l_data(i).RESPONSE_AUTHENTICATOR,l_data(i).MESSAGE,l_data(i).SDK_ERROR_CODE,l_data(i).SDK_ERROR_MESSAGE,l_data(i).ID,l_data(i).MODIFY_DATE,l_data(i).APP_VERSION); -- use columns name
+            lc_out := 'INS';
+            FOR i IN 1..reccount
+			  LOOP
+                 DELETE FROM IBMBUSER.CS_TRANSACTION_AUDIT@ARCH_CIDB_IBMB WHERE ID = l_data(i).ID;
+			  END LOOP;
+            lc_out := lc_out || '-DEL-';
+            IF SQL%FOUND THEN
+                lc_out := lc_out || 'SUCCESS';
+                INSERT INTO ibmb_archive_audit (TBL_NAME, RECOUNT, STATUS,ERR_TEXT) VALUES ('CS_TRANSACTION_AUDIT',reccount,'1',lc_out);
+                COMMIT;
+            END IF;
+            EXIT WHEN c_archiveData%NOTFOUND;
+        EXCEPTION
+            WHEN OTHERS
+            THEN
+                ROLLBACK;
+                lc_out := lc_out || 'Error:' || SQLERRM;
+				totalRecords := totalRecords - reccount;
+                INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('CS_TRANSACTION_AUDIT',reccount,'0',lc_out);
+                COMMIT;
+        END;
+	END LOOP;
+	CLOSE c_archiveData;
+	INSERT INTO IBMB_ARCHIVE_AUDIT(TBL_NAME, RECOUNT, STATUS, ERR_TEXT)  VALUES('CS_TRANSACTION_AUDIT',totalRecords,'1','JOB_COMPLETED');
+    COMMIT;
+    END ARCHIVE_CS_TRANSACTION_AUDIT;
+
+END;
+
+/
+
+commit;
+
+
+--------------------------------
 Yes, you can set multiple email addresses in the os.environ['TO_ADDRESS'] field and modify the send_mail function to handle multiple recipients. You can store multiple email addresses in the TO_ADDRESS environment variable separated by a delimiter (e.g., comma) and then split this string into a list in the function.
 
 Here’s how you can modify your function:
