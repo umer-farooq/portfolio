@@ -1,3 +1,38 @@
+Hi ⁠
+
+Vishal
+
+ 
+
+Jagtap
+
+ this cin is not working on SIT 
+
+⁠
+
+Narendra
+
+ 
+
+Chundru
+
+ 
+
+Khadeeja
+
+ 
+
+Obaid
+
+ 
+
+Al
+
+ 
+
+Zaabi
+
+ as per process our merge requests are not getting approved on UAT4 as evidences on SIT testing needs to be shared. due to limitation of data on SIT and we are unable to verify code changes on SIT and proceed with deployment on UAT4 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
     String companyCode = ciRepository.getAccountUnitIdentifier(depositCreateRequest.getSourceAccountNumber());
