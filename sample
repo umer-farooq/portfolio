@@ -1,38 +1,16 @@
-Hi ⁠
+Hi Vishal,
 
-Vishal
+I wanted to bring to your attention that the CIN for Narendra Khadeeja Obaid Al Zaabi is not functioning as expected on the SIT environment.
 
- 
+As per the process, our merge requests are not being approved on UAT4 because we need to provide evidence of successful SIT testing. However, due to the data limitations on SIT, we are unable to verify the code changes thoroughly, which is preventing us from moving forward with the deployment on UAT4.
 
-Jagtap
+Could you please assist in resolving this issue or advise on how we can proceed?
 
- this cin is not working on SIT 
+Thank you for your attention to this matter.
 
-⁠
+Best regards,
+Umer Farooq
 
-Narendra
-
- 
-
-Chundru
-
- 
-
-Khadeeja
-
- 
-
-Obaid
-
- 
-
-Al
-
- 
-
-Zaabi
-
- as per process our merge requests are not getting approved on UAT4 as evidences on SIT testing needs to be shared. due to limitation of data on SIT and we are unable to verify code changes on SIT and proceed with deployment on UAT4 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
     String companyCode = ciRepository.getAccountUnitIdentifier(depositCreateRequest.getSourceAccountNumber());
