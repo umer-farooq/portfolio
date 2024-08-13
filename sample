@@ -1,3 +1,16 @@
+private String interestRedeemAccount;
+    private String interestRate;
+    private String sourceAccountNumber;
+    private String principalRedeemAccount;
+
+				String companyCode = ciRepository
+						.getAccountUnitIdentifier(depositCreateRequest.getSourceAccountNumber());
+				if (StringUtils.isNotBlank(companyCode)) {
+					if (companyCode.equals(T24CompanyCodes.ISL.getCompanyCode())) {
+						throw new AppException(ErrorCodes.DEPOSIT_ISL_NOT_ALLOWED);
+					}
+				}
+
 set define off;
 
 CREATE OR REPLACE PACKAGE "IBMBUSER.IBMB_ARCHIVE_PKG" 
