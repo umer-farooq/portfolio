@@ -1,16 +1,29 @@
-private String interestRedeemAccount;
-    private String interestRate;
-    private String sourceAccountNumber;
-    private String principalRedeemAccount;
+public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
+    // Get company code based on the source account number
+    String companyCode = ciRepository.getAccountUnitIdentifier(depositCreateRequest.getSourceAccountNumber());
+    
+    // Validate company code
+    validateCompanyCode(companyCode);
+    
+    // Validate interest redeem account
+    validateAccountForISL(depositCreateRequest.getInterestRedeemAccount());
+    
+    // Validate principal redeem account
+    validateAccountForISL(depositCreateRequest.getPrincipalRedeemAccount());
+}
 
-				String companyCode = ciRepository
-						.getAccountUnitIdentifier(depositCreateRequest.getSourceAccountNumber());
-				if (StringUtils.isNotBlank(companyCode)) {
-					if (companyCode.equals(T24CompanyCodes.ISL.getCompanyCode())) {
-						throw new AppException(ErrorCodes.DEPOSIT_ISL_NOT_ALLOWED);
-					}
-				}
+private void validateCompanyCode(String companyCode) {
+    if (StringUtils.isNotBlank(companyCode) && companyCode.equals(T24CompanyCodes.ISL.getCompanyCode())) {
+        throw new AppException(ErrorCodes.DEPOSIT_ISL_NOT_ALLOWED);
+    }
+}
 
+private void validateAccountForISL(String accountNumber) {
+    if (StringUtils.isNotBlank(accountNumber)) {
+        String companyCode = ciRepository.getAccountUnitIdentifier(accountNumber);
+        validateCompanyCode(companyCode);
+    }
+}
 set define off;
 
 CREATE OR REPLACE PACKAGE "IBMBUSER.IBMB_ARCHIVE_PKG" 
