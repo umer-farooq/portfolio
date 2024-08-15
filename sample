@@ -1,15 +1,78 @@
-Hi Vishal,
+	public CreateCoolingPeriodResponse createCoolingPeriod(DepositCreateRequest depositCreateRequest) {
+		CreateCoolingPeriodResponse createCoolingPeriodResponse = new CreateCoolingPeriodResponse();
+	return execute(depositCreateRequest, createCoolingPeriodResponse, req->{
+		if (Objects.nonNull(depositCreateRequest)) {
+			log.info("Inside createCoolingPeriod method");
+			
+			Amount selectedInputAmount= new Amount(depositCreateRequest.getDepositAmount(),LOCAL_CURRENCY);
+			depositSF.validateDepositAmount(selectedInputAmount, depositCreateRequest.getAppVersion());
+			
+			// Validate source account
+			log.info("Validate Source Account for ISL");
+			validateAccountForISL(depositCreateRequest.getSourceAccountNumber());
+				        
+			// Validate interest redeem account
+			log.info("Validate InterestRedeem Account for ISL");
+			validateAccountForISL(depositCreateRequest.getInterestRedeemAccount());
+					    
+			// Validate principal redeem account
+			log.info("Validate Principal Redeem Account for ISL");
+			validateAccountForISL(depositCreateRequest.getPrincipalRedeemAccount());
+			
+			if (!customerSF.validateAccountBelongsToCif(depositCreateRequest.getInterestRedeemAccount())
+					|| !customerSF.validateAccountBelongsToCif(depositCreateRequest.getPrincipalRedeemAccount())
+					|| !customerSF.validateAccountBelongsToCif(depositCreateRequest.getSourceAccountNumber())) {
+				log.info("Account doesnt belongs to the logged in customer, rejecting the access");
+				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+			}
 
-I wanted to bring to your attention that the CIN for Narendra Khadeeja Obaid Al Zaabi is not functioning as expected on the SIT environment.
+			log.info("Validating if rate is not tampered");
+			DepositRateRequest depositRateRequest = new DepositRateRequest();
+			depositRateRequest.setCurrency(depositCreateRequest.getDepositCurrency());
+			depositRateRequest.setSelectedTermDepositValue(selectedInputAmount);
+			depositRateRequest.setAppVersion(depositCreateRequest.getAppVersion());
+			FetchDepositRateResponse fetchDepositRateResponse = depositSF.fetchDepositRates(depositRateRequest);
+			if (!depositValidator.validateRates(depositCreateRequest, fetchDepositRateResponse)) {
+				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+			}
+		} else {
+			throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+		}
 
-As per the process, our merge requests are not being approved on UAT4 because we need to provide evidence of successful SIT testing. However, due to the data limitations on SIT, we are unable to verify the code changes thoroughly, which is preventing us from moving forward with the deployment on UAT4.
+		CoolingPeriodRequest coolingPeriodRequest = new CoolingPeriodRequest();
 
-Could you please assist in resolving this issue or advise on how we can proceed?
+		setCoolingPeriodRequest(depositCreateRequest, coolingPeriodRequest);
 
-Thank you for your attention to this matter.
+		createCoolingPeriodResponse = coolingPeriodServiceInvoker
+				.createCoolingPeriod(coolingPeriodRequest);
 
-Best regards,
-Umer Farooq
+		if (Objects.nonNull(createCoolingPeriodResponse)
+				&& AppConstants.SUCCESS.equalsIgnoreCase(createCoolingPeriodResponse.getResponseStatus().getStatus())) {
+			log.info("Inside CoolingPeriod Job notification");
+
+			// Async saving data in ConsentPreferences
+			try {
+				consentPreferencesPublish(depositCreateRequest);
+			} catch (Exception e) {
+				log.info("Exception Received on hitting the Consent Preferences Service: " + e);
+			}
+			
+			String SmsDynamicUrl = settingsRepository.getSetting(AppConstants.COOLING_PERIOD_SMS_DYNAMIC_URL);
+			log.info("SMSDynamicUrl: "+SmsDynamicUrl);
+			
+			Map<String, Object> msgArgs = new HashMap<>();
+			msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
+			msgArgs.put("link", SmsDynamicUrl);
+			notificationService.processNotification(ContentID.COOLING_PERIOD_JOB_SUCCESS, SessionContext.getSession(),
+					msgArgs);
+		} else {
+			throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
+		}
+
+		return createCoolingPeriodResponse;
+	});
+	
+	}
 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
