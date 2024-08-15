@@ -1,79 +1,75 @@
-Local variable createCoolingPeriodResponse defined in an enclosing scope must be final or effectively final
 public CreateCoolingPeriodResponse createCoolingPeriod(DepositCreateRequest depositCreateRequest) {
-		CreateCoolingPeriodResponse createCoolingPeriodResponse = new CreateCoolingPeriodResponse();
-	return execute(depositCreateRequest, createCoolingPeriodResponse, req->{
-		if (Objects.nonNull(depositCreateRequest)) {
-			log.info("Inside createCoolingPeriod method");
-			
-			Amount selectedInputAmount= new Amount(depositCreateRequest.getDepositAmount(),LOCAL_CURRENCY);
-			depositSF.validateDepositAmount(selectedInputAmount, depositCreateRequest.getAppVersion());
-			
-			// Validate source account
-			log.info("Validate Source Account for ISL");
-			validateAccountForISL(depositCreateRequest.getSourceAccountNumber());
-				        
-			// Validate interest redeem account
-			log.info("Validate InterestRedeem Account for ISL");
-			validateAccountForISL(depositCreateRequest.getInterestRedeemAccount());
-					    
-			// Validate principal redeem account
-			log.info("Validate Principal Redeem Account for ISL");
-			validateAccountForISL(depositCreateRequest.getPrincipalRedeemAccount());
-			
-			if (!customerSF.validateAccountBelongsToCif(depositCreateRequest.getInterestRedeemAccount())
-					|| !customerSF.validateAccountBelongsToCif(depositCreateRequest.getPrincipalRedeemAccount())
-					|| !customerSF.validateAccountBelongsToCif(depositCreateRequest.getSourceAccountNumber())) {
-				log.info("Account doesnt belongs to the logged in customer, rejecting the access");
-				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-			}
-
-			log.info("Validating if rate is not tampered");
-			DepositRateRequest depositRateRequest = new DepositRateRequest();
-			depositRateRequest.setCurrency(depositCreateRequest.getDepositCurrency());
-			depositRateRequest.setSelectedTermDepositValue(selectedInputAmount);
-			depositRateRequest.setAppVersion(depositCreateRequest.getAppVersion());
-			FetchDepositRateResponse fetchDepositRateResponse = depositSF.fetchDepositRates(depositRateRequest);
-			if (!depositValidator.validateRates(depositCreateRequest, fetchDepositRateResponse)) {
-				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-			}
-		} else {
-			throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-		}
-
-		CoolingPeriodRequest coolingPeriodRequest = new CoolingPeriodRequest();
-
-		setCoolingPeriodRequest(depositCreateRequest, coolingPeriodRequest);
-
-		createCoolingPeriodResponse = coolingPeriodServiceInvoker
-				.createCoolingPeriod(coolingPeriodRequest);
-
-		if (Objects.nonNull(createCoolingPeriodResponse)
-				&& AppConstants.SUCCESS.equalsIgnoreCase(createCoolingPeriodResponse.getResponseStatus().getStatus())) {
-			log.info("Inside CoolingPeriod Job notification");
-
-			// Async saving data in ConsentPreferences
-			try {
-				consentPreferencesPublish(depositCreateRequest);
-			} catch (Exception e) {
-				log.info("Exception Received on hitting the Consent Preferences Service: " + e);
-			}
-			
-			String SmsDynamicUrl = settingsRepository.getSetting(AppConstants.COOLING_PERIOD_SMS_DYNAMIC_URL);
-			log.info("SMSDynamicUrl: "+SmsDynamicUrl);
-			
-			Map<String, Object> msgArgs = new HashMap<>();
-			msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
-			msgArgs.put("link", SmsDynamicUrl);
-			notificationService.processNotification(ContentID.COOLING_PERIOD_JOB_SUCCESS, SessionContext.getSession(),
-					msgArgs);
-		} else {
-			throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
-		}
-
-		return createCoolingPeriodResponse;
-	});
-	
-	}
+    CreateCoolingPeriodResponse createCoolingPeriodResponse = new CreateCoolingPeriodResponse();
+    
+    return execute(depositCreateRequest, createCoolingPeriodResponse, req -> {
+        if (Objects.nonNull(depositCreateRequest)) {
+            log.info("Inside createCoolingPeriod method");
+            
+            Amount selectedInputAmount = new Amount(depositCreateRequest.getDepositAmount(), LOCAL_CURRENCY);
+            depositSF.validateDepositAmount(selectedInputAmount, depositCreateRequest.getAppVersion());
+            
+            // Validate source account
+            log.info("Validate Source Account for ISL");
+            validateAccountForISL(depositCreateRequest.getSourceAccountNumber());
+            
+            // Validate interest redeem account
+            log.info("Validate InterestRedeem Account for ISL");
+            validateAccountForISL(depositCreateRequest.getInterestRedeemAccount());
+            
+            // Validate principal redeem account
+            log.info("Validate Principal Redeem Account for ISL");
+            validateAccountForISL(depositCreateRequest.getPrincipalRedeemAccount());
+            
+            if (!customerSF.validateAccountBelongsToCif(depositCreateRequest.getInterestRedeemAccount())
+                    || !customerSF.validateAccountBelongsToCif(depositCreateRequest.getPrincipalRedeemAccount())
+                    || !customerSF.validateAccountBelongsToCif(depositCreateRequest.getSourceAccountNumber())) {
+                log.info("Account doesn't belong to the logged-in customer, rejecting the access");
+                throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+            }
+            
+            log.info("Validating if rate is not tampered");
+            DepositRateRequest depositRateRequest = new DepositRateRequest();
+            depositRateRequest.setCurrency(depositCreateRequest.getDepositCurrency());
+            depositRateRequest.setSelectedTermDepositValue(selectedInputAmount);
+            depositRateRequest.setAppVersion(depositCreateRequest.getAppVersion());
+            FetchDepositRateResponse fetchDepositRateResponse = depositSF.fetchDepositRates(depositRateRequest);
+            if (!depositValidator.validateRates(depositCreateRequest, fetchDepositRateResponse)) {
+                throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+            }
+        } else {
+            throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+        }
+        
+        CoolingPeriodRequest coolingPeriodRequest = new CoolingPeriodRequest();
+        setCoolingPeriodRequest(depositCreateRequest, coolingPeriodRequest);
+        
+        CreateCoolingPeriodResponse response = coolingPeriodServiceInvoker.createCoolingPeriod(coolingPeriodRequest);
+        
+        if (Objects.nonNull(response)
+                && AppConstants.SUCCESS.equalsIgnoreCase(response.getResponseStatus().getStatus())) {
+            log.info("Inside CoolingPeriod Job notification");
+            
+            // Async saving data in ConsentPreferences
+            try {
+                consentPreferencesPublish(depositCreateRequest);
+            } catch (Exception e) {
+                log.info("Exception received on hitting the Consent Preferences Service: " + e);
+            }
+            
+            String SmsDynamicUrl = settingsRepository.getSetting(AppConstants.COOLING_PERIOD_SMS_DYNAMIC_URL);
+            log.info("SMSDynamicUrl: " + SmsDynamicUrl);
+            
+            Map<String, Object> msgArgs = new HashMap<>();
+            msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
+            msgArgs.put("link", SmsDynamicUrl);
+            notificationService.processNotification(ContentID.COOLING_PERIOD_JOB_SUCCESS, SessionContext.getSession(), msgArgs);
+        } else {
+            throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
+        }
+        
+        return response;
+    });
+}
 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
