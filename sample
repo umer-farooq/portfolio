@@ -1,4 +1,5 @@
-	public CreateCoolingPeriodResponse createCoolingPeriod(DepositCreateRequest depositCreateRequest) {
+Local variable createCoolingPeriodResponse defined in an enclosing scope must be final or effectively final
+public CreateCoolingPeriodResponse createCoolingPeriod(DepositCreateRequest depositCreateRequest) {
 		CreateCoolingPeriodResponse createCoolingPeriodResponse = new CreateCoolingPeriodResponse();
 	return execute(depositCreateRequest, createCoolingPeriodResponse, req->{
 		if (Objects.nonNull(depositCreateRequest)) {
