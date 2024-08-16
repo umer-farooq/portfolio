@@ -1,75 +1,16 @@
-public CreateCoolingPeriodResponse createCoolingPeriod(DepositCreateRequest depositCreateRequest) {
-    CreateCoolingPeriodResponse createCoolingPeriodResponse = new CreateCoolingPeriodResponse();
-    
-    return execute(depositCreateRequest, createCoolingPeriodResponse, req -> {
-        if (Objects.nonNull(depositCreateRequest)) {
-            log.info("Inside createCoolingPeriod method");
-            
-            Amount selectedInputAmount = new Amount(depositCreateRequest.getDepositAmount(), LOCAL_CURRENCY);
-            depositSF.validateDepositAmount(selectedInputAmount, depositCreateRequest.getAppVersion());
-            
-            // Validate source account
-            log.info("Validate Source Account for ISL");
-            validateAccountForISL(depositCreateRequest.getSourceAccountNumber());
-            
-            // Validate interest redeem account
-            log.info("Validate InterestRedeem Account for ISL");
-            validateAccountForISL(depositCreateRequest.getInterestRedeemAccount());
-            
-            // Validate principal redeem account
-            log.info("Validate Principal Redeem Account for ISL");
-            validateAccountForISL(depositCreateRequest.getPrincipalRedeemAccount());
-            
-            if (!customerSF.validateAccountBelongsToCif(depositCreateRequest.getInterestRedeemAccount())
-                    || !customerSF.validateAccountBelongsToCif(depositCreateRequest.getPrincipalRedeemAccount())
-                    || !customerSF.validateAccountBelongsToCif(depositCreateRequest.getSourceAccountNumber())) {
-                log.info("Account doesn't belong to the logged-in customer, rejecting the access");
-                throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-            }
-            
-            log.info("Validating if rate is not tampered");
-            DepositRateRequest depositRateRequest = new DepositRateRequest();
-            depositRateRequest.setCurrency(depositCreateRequest.getDepositCurrency());
-            depositRateRequest.setSelectedTermDepositValue(selectedInputAmount);
-            depositRateRequest.setAppVersion(depositCreateRequest.getAppVersion());
-            FetchDepositRateResponse fetchDepositRateResponse = depositSF.fetchDepositRates(depositRateRequest);
-            if (!depositValidator.validateRates(depositCreateRequest, fetchDepositRateResponse)) {
-                throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-            }
-        } else {
-            throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
-        }
-        
-        CoolingPeriodRequest coolingPeriodRequest = new CoolingPeriodRequest();
-        setCoolingPeriodRequest(depositCreateRequest, coolingPeriodRequest);
-        
-        CreateCoolingPeriodResponse response = coolingPeriodServiceInvoker.createCoolingPeriod(coolingPeriodRequest);
-        
-        if (Objects.nonNull(response)
-                && AppConstants.SUCCESS.equalsIgnoreCase(response.getResponseStatus().getStatus())) {
-            log.info("Inside CoolingPeriod Job notification");
-            
-            // Async saving data in ConsentPreferences
-            try {
-                consentPreferencesPublish(depositCreateRequest);
-            } catch (Exception e) {
-                log.info("Exception received on hitting the Consent Preferences Service: " + e);
-            }
-            
-            String SmsDynamicUrl = settingsRepository.getSetting(AppConstants.COOLING_PERIOD_SMS_DYNAMIC_URL);
-            log.info("SMSDynamicUrl: " + SmsDynamicUrl);
-            
-            Map<String, Object> msgArgs = new HashMap<>();
-            msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
-            msgArgs.put("link", SmsDynamicUrl);
-            notificationService.processNotification(ContentID.COOLING_PERIOD_JOB_SUCCESS, SessionContext.getSession(), msgArgs);
-        } else {
-            throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
-        }
-        
-        return response;
-    });
-}
+Hi Somasuntharam,
+I'm Angela, and I'll be assisting you in this case.
+It appears that you have encountered an error/exception that states 'UNIMPLEMENTED' when you're trying to send a notification request (using the deprecated: sendAll() batch send method) with your Java Admin SDK implementation.
+Upon checking the logs and details you have shared, it appears that you are using an outdated version of the Firebase Admin SDK that contains the sendAll() method for sending messages which causes the 'No enum constant com.google.firebase.ErrorCode.UNIMPLEMENTED' error message to be returned. Please be advised that the following APIs or methods below, which includes the method you're using have been deprecated last June 20, 2023 and are no longer recommended for use:
+•	sendAll() 
+•	sendAllAsync() 
+•	send_all() 
+•	sendMulticast() 
+•	SendMulticastAsync() 
+•	send_multicast() 
+Given the information above, in relation to the deprecation of these APIs, the error code you encountered specifies the usage of deprecated batch send requests. Along with this, to resolve your issue and to ensure smooth communication through Firebase Cloud Messaging (FCM), we highly recommend migrating your current implementation to use HTTP v1 and the new APIs; in your case, use sendEach() instead. Also, you need to upgrade your SDK version to at least v9.2.0 that includes the support for these new APIs. You can refer to our Firebase FAQs to learn more about these deprecated APIs and the recommended action items to take, along with the respective v1 batch send counterparts for these deprecated legacy batch send methods [FCM features deprecated in June 2023 -> Which FCM APIs were deprecated on June 20, 2023, and what should I do if I am using those APIs? -> Firebase Admin SDK APIs].
+Hope it helps. Let me know if you have any clarifications or questions.
+
 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
