@@ -1,16 +1,553 @@
-Hi Somasuntharam,
-I'm Angela, and I'll be assisting you in this case.
-It appears that you have encountered an error/exception that states 'UNIMPLEMENTED' when you're trying to send a notification request (using the deprecated: sendAll() batch send method) with your Java Admin SDK implementation.
-Upon checking the logs and details you have shared, it appears that you are using an outdated version of the Firebase Admin SDK that contains the sendAll() method for sending messages which causes the 'No enum constant com.google.firebase.ErrorCode.UNIMPLEMENTED' error message to be returned. Please be advised that the following APIs or methods below, which includes the method you're using have been deprecated last June 20, 2023 and are no longer recommended for use:
-•	sendAll() 
-•	sendAllAsync() 
-•	send_all() 
-•	sendMulticast() 
-•	SendMulticastAsync() 
-•	send_multicast() 
-Given the information above, in relation to the deprecation of these APIs, the error code you encountered specifies the usage of deprecated batch send requests. Along with this, to resolve your issue and to ensure smooth communication through Firebase Cloud Messaging (FCM), we highly recommend migrating your current implementation to use HTTP v1 and the new APIs; in your case, use sendEach() instead. Also, you need to upgrade your SDK version to at least v9.2.0 that includes the support for these new APIs. You can refer to our Firebase FAQs to learn more about these deprecated APIs and the recommended action items to take, along with the respective v1 batch send counterparts for these deprecated legacy batch send methods [FCM features deprecated in June 2023 -> Which FCM APIs were deprecated on June 20, 2023, and what should I do if I am using those APIs? -> Firebase Admin SDK APIs].
-Hope it helps. Let me know if you have any clarifications or questions.
+Top 5 Vulnerable Packages
+5 log4j:log4j-1.2.17
+2 com.fasterxml.jackson.core:jackson-databind-2.1
+3.3
+2 org.springframework.security:spring-security-cor
+e-5.7.3
+1 commons-collections:commons-collections-3.2.2
+1 net.minidev:json-smart-2.4.7
 
+
+Fixed Pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.fgb</groupId>
+	<version>0.0.1-SNAPSHOT</version>
+	<artifactId>FABAdmin</artifactId>
+	<packaging>war</packaging>
+	<name>FABAdminAPI</name>
+	<description>FABAdminAPI</description>
+
+	<properties>
+		<junit.version>4.11</junit.version>
+		<jdk.version>1.8</jdk.version>
+		<logger.version>2.17.1</logger.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>javax</groupId>
+			<artifactId>javaee-api</artifactId>
+			<version>7.0</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- <dependency> <groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-jaxrs_2.0_spec</artifactId> 
+			<version>1.0-alpha-1</version> <scope>provided</scope> </dependency> <dependency> 
+			<groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-servlet_3.0_spec</artifactId> 
+			<version>1.0</version> <scope>provided</scope> </dependency> <dependency> 
+			<groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-ejb_3.1_spec</artifactId> 
+			<version>1.0.2</version> <scope>provided</scope> </dependency> -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.7</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-text</artifactId>
+			<version>1.2</version>
+		</dependency>
+		<dependency>
+           <groupId>com.opencsv</groupId>
+           <artifactId>opencsv</artifactId>
+           <version>5.9</version>
+           <exclusions>
+				<exclusion>
+					<groupId>commons-collections</groupId>
+					<artifactId>commons-collections</artifactId>
+				</exclusion>
+			</exclusions>
+        </dependency>
+		<dependency>
+			<groupId>com.fab</groupId>
+			<artifactId>PBLogger</artifactId>
+			<version>1.7</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>javax.interceptor</groupId>
+			<artifactId>javax.interceptor-api</artifactId>
+			<version>3.1</version>
+		</dependency>
+		<!-- changed version from 1.9.0 to 1.9.3 -->
+		<dependency>
+			<groupId>org.jasypt</groupId>
+			<artifactId>jasypt-spring31</artifactId>
+			<version>1.9.3</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpcore</artifactId>
+			<version>4.4.6</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpmime</artifactId>
+			<version>4.5.3</version>
+			<exclusions>
+				<exclusion>
+				    <groupId>org.apache.httpcomponents</groupId>
+				    <artifactId>httpclient</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- changed version from 4.5.3 to 4.5.13 -->
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.14</version>
+		</dependency>
+		<dependency>
+			<groupId>com.jayway.jsonpath</groupId>
+			<artifactId>json-path</artifactId>
+			<version>2.9.0</version>
+		</dependency>
+		<!-- changed version from 2.12.5 to 2.13.3 -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>2.13.3</version>
+		</dependency>
+		<!-- changed version from 2.9.4 to 2.13.3 -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.13.4.2</version>
+		</dependency>
+		<dependency>
+			<groupId>com.ibm.websphere.appserver.api</groupId>
+			<artifactId>com.ibm.websphere.appserver.api.distributedMap</artifactId>
+			<version>2.0.17</version>
+		</dependency>
+		<!-- changed version from 1.54 to 1.70 -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk15on</artifactId>
+			<version>1.70</version>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle</groupId>
+			<artifactId>ojdbc6</artifactId>
+			<version>11.2.0.3</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.11.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-core</artifactId>
+			<version>1.12.769</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+				<exclusion>
+				    <groupId>com.fasterxml.jackson.dataformat</groupId>
+				    <artifactId>jackson-dataformat-cbor</artifactId>
+				</exclusion>
+				<exclusion>
+				    <groupId>org.apache.httpcomponents</groupId>
+				    <artifactId>httpclient</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-pinpoint</artifactId>
+			<version>1.11.383</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- changed version from 5.0.0 to 5.2.2 -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.3.0</version>
+			<exclusions>
+				<exclusion>
+				    <groupId>org.apache.logging.log4j</groupId>
+				    <artifactId>log4j-api</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+		    <groupId>com.fasterxml.jackson.dataformat</groupId>
+		    <artifactId>jackson-dataformat-cbor</artifactId>
+		    <version>2.13.3</version>
+		</dependency>
+		<dependency>
+			<groupId>com.unboundid</groupId>
+    		<artifactId>unboundid-ldapsdk</artifactId>
+    		<version>6.0.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ldap</groupId>
+			<artifactId>spring-ldap-core</artifactId>
+			<version>2.4.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-ldap</artifactId>
+			<version>6.3.1</version>
+		</dependency>
+		
+		<dependency>
+		    <groupId>com.google.re2j</groupId>
+		    <artifactId>re2j</artifactId>
+		    <version>1.7</version>
+		</dependency>
+		
+		<dependency>
+		    <groupId>com.google.code.gson</groupId>
+		    <artifactId>gson</artifactId>
+		    <version>2.10.1</version>
+		</dependency>
+		
+		<dependency>
+		    <groupId>org.apache.logging.log4j</groupId>
+		    <artifactId>log4j-slf4j-impl</artifactId>
+		    <version>${logger.version}</version>
+		</dependency>
+		
+
+		<!-- <dependency> <groupId>javax.jms</groupId> <artifactId>javax.jms-api</artifactId> 
+			<version>2.0.1</version> </dependency> -->
+	</dependencies>
+	<build>
+		<finalName>FABAdmin</finalName>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.0</version>
+				<configuration>
+					<source>${jdk.version}</source>
+					<target>${jdk.version}</target>
+					<archive>
+						<manifest>
+							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+						</manifest>
+						<manifestEntries>
+							<Implementation-Build>$\{buildNumber}</Implementation-Build>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-war-plugin</artifactId>
+				<version>3.4.0</version>
+				<configuration>
+					<webXml>src/main/webapp/WEB-INF/web.xml</webXml>
+					<ignoreWebxml>false</ignoreWebxml>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>2.16</version>
+				<configuration>
+					<skipTests>true</skipTests>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+ <repositories>
+	 <repository>
+		 <id>repo1</id>
+		 <name> nexus-release-repo1</name>
+		 <url>https://nexus.platform-tools-development.mesouth1.bankfab.com/repository/maven-releases/ </url>
+     </repository>
+ </repositories>
+</project>
+--------------------------------------------------
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.fgb</groupId>
+	<version>0.0.1-SNAPSHOT</version>
+	<artifactId>FABAdmin</artifactId>
+	<packaging>war</packaging>
+	<name>FABAdminAPI</name>
+	<description>FABAdminAPI</description>
+
+	<properties>
+		<junit.version>4.11</junit.version>
+		<jdk.version>1.8</jdk.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>javax</groupId>
+			<artifactId>javaee-api</artifactId>
+			<version>7.0</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- <dependency> <groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-jaxrs_2.0_spec</artifactId> 
+			<version>1.0-alpha-1</version> <scope>provided</scope> </dependency> <dependency> 
+			<groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-servlet_3.0_spec</artifactId> 
+			<version>1.0</version> <scope>provided</scope> </dependency> <dependency> 
+			<groupId>org.apache.geronimo.specs</groupId> <artifactId>geronimo-ejb_3.1_spec</artifactId> 
+			<version>1.0.2</version> <scope>provided</scope> </dependency> -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.7</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-text</artifactId>
+			<version>1.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fab</groupId>
+			<artifactId>PBLogger</artifactId>
+			<version>1.0</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>javax.interceptor</groupId>
+			<artifactId>javax.interceptor-api</artifactId>
+			<version>3.1</version>
+		</dependency>
+		<!-- changed version from 1.9.0 to 1.9.3 -->
+		<dependency>
+			<groupId>org.jasypt</groupId>
+			<artifactId>jasypt-spring31</artifactId>
+			<version>1.9.3</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpcore</artifactId>
+			<version>4.4.6</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpmime</artifactId>
+			<version>4.5.3</version>
+			<exclusions>
+				<exclusion>
+				    <groupId>org.apache.httpcomponents</groupId>
+				    <artifactId>httpclient</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- changed version from 4.5.3 to 4.5.13 -->
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.13</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.jayway.jsonpath</groupId>
+			<artifactId>json-path</artifactId>
+			<version>2.6.0</version>
+		</dependency>
+		<!-- changed version from 2.12.5 to 2.13.3 -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>2.13.3</version>
+		</dependency>
+		<!-- changed version from 2.9.4 to 2.13.3 -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.13.3</version>
+		</dependency>
+		<dependency>
+			<groupId>com.ibm.websphere.appserver.api</groupId>
+			<artifactId>com.ibm.websphere.appserver.api.distributedMap</artifactId>
+			<version>2.0.17</version>
+		</dependency>
+		<!-- changed version from 1.54 to 1.70 -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk15on</artifactId>
+			<version>1.70</version>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle</groupId>
+			<artifactId>ojdbc6</artifactId>
+			<version>11.2.0.3</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.11.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-core</artifactId>
+			<version>1.11.383</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+				<exclusion>
+				    <groupId>com.fasterxml.jackson.dataformat</groupId>
+				    <artifactId>jackson-dataformat-cbor</artifactId>
+				</exclusion>
+				<exclusion>
+				    <groupId>org.apache.httpcomponents</groupId>
+				    <artifactId>httpclient</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-pinpoint</artifactId>
+			<version>1.11.383</version>
+			<exclusions>
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- changed version from 5.0.0 to 5.2.2 -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.2.2</version>
+			<exclusions>
+				<exclusion>
+				    <groupId>org.apache.logging.log4j</groupId>
+				    <artifactId>log4j-api</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.logging.log4j</groupId>
+		    <artifactId>log4j-api</artifactId>
+		    <version>2.18.0</version>
+		</dependency>
+		<dependency>
+		    <groupId>com.fasterxml.jackson.dataformat</groupId>
+		    <artifactId>jackson-dataformat-cbor</artifactId>
+		    <version>2.13.3</version>
+		</dependency>
+		<dependency>
+			<groupId>com.unboundid</groupId>
+    		<artifactId>unboundid-ldapsdk</artifactId>
+    		<version>6.0.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ldap</groupId>
+			<artifactId>spring-ldap-core</artifactId>
+			<version>2.4.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-ldap</artifactId>
+			<version>5.7.3</version>
+		</dependency>
+		
+		<dependency>
+		    <groupId>com.google.re2j</groupId>
+		    <artifactId>re2j</artifactId>
+		    <version>1.7</version>
+		</dependency>
+
+		<!-- <dependency> <groupId>javax.jms</groupId> <artifactId>javax.jms-api</artifactId> 
+			<version>2.0.1</version> </dependency> -->
+	</dependencies>
+	<build>
+		<finalName>FABAdmin</finalName>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.0</version>
+				<configuration>
+					<source>${jdk.version}</source>
+					<target>${jdk.version}</target>
+					<archive>
+						<manifest>
+							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+						</manifest>
+						<manifestEntries>
+							<Implementation-Build>$\{buildNumber}</Implementation-Build>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-war-plugin</artifactId>
+				<version>3.4.0</version>
+				<configuration>
+					<webXml>src/main/webapp/WEB-INF/web.xml</webXml>
+					<ignoreWebxml>false</ignoreWebxml>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>2.16</version>
+				<configuration>
+					<skipTests>true</skipTests>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+ <repositories>
+	 <repository>
+		 <id>repo1</id>
+		 <name> nexus-release-repo1</name>
+		 <url>https://nexus.platform-tools-development.mesouth1.bankfab.com/repository/maven-releases/ </url>
+     </repository>
+ </repositories>
+</project>
+
+
+--------------------------------------------------
 
 public void validateDepositRequest(DepositCreateRequest depositCreateRequest) {
     // Get company code based on the source account number
