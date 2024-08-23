@@ -1,3 +1,30 @@
+Root Cause Analysis (RCA)
+
+Incident Summary:
+A recent change was made to the backend API of the Internet Banking platform to disable ADPF Payment beneficiary accounts from appearing in the drop-down list. However, this change unintentionally impacted the Mobile Banking platform, resulting in the ADPF Payment beneficiary accounts also being removed from the mobile platform, which was not part of the requested change. The issue was missed during both the testing and regression testing phases and was not identified in the test case sign-off process.
+
+Root Cause:
+The root cause of the incident is attributed to insufficient impact analysis of the backend API change. The change was only intended for the Internet Banking platform but inadvertently affected shared components used by both the Internet Banking and Mobile Banking platforms. Additionally, there was a failure in communication regarding the potential impact of the change on other platforms.
+
+Contributing Factors:
+
+Lack of Comprehensive Impact Analysis: The change request focused on the Internet Banking platform but did not consider the shared nature of the backend services between the Internet Banking and Mobile Banking platforms.
+Inadequate Testing Coverage: The testing team did not account for the Mobile Banking platform in their test cases. This critical omission led to the issue going unnoticed during both functional and regression testing.
+Test Case Sign-off Missed the Issue: Test case sign-off procedures failed to ensure that all related platforms, including Mobile Banking, were tested. The sign-off process did not include validation across all impacted platforms.
+Communication Gap: There was insufficient communication between the development and testing teams regarding the scope of the change and its potential impact on other services, such as the Mobile Banking platform.
+Corrective Actions:
+
+Enhanced Impact Assessment Process: Implement a more thorough impact assessment process that explicitly includes the evaluation of shared services and cross-platform dependencies before making any backend changes.
+Improved Test Coverage: Expand test case development to include scenarios that cover all platforms that utilize shared services, such as both Internet Banking and Mobile Banking. Ensure test cases are updated accordingly for future changes.
+Stricter Sign-off Procedures: Update the test case sign-off process to require a formal review of all platforms impacted by the change, ensuring cross-platform validation before final approval.
+Cross-team Communication: Establish stronger communication protocols between development, testing, and business teams to ensure that all potential impacts of a change are clearly understood and documented across all relevant platforms.
+Preventive Actions:
+
+Platform-Specific Testing: Mandate that all API changes are tested across every platform using the shared service, with specific test cases for each platform.
+Automated Regression Testing: Introduce or enhance automated regression testing to cover multiple platforms and ensure that future changes do not inadvertently affect other parts of the system.
+Platform Awareness Training: Conduct regular training sessions to improve platform awareness for both developers and testers, focusing on understanding how changes in one platform can impact others.
+
+
 org.bouncycastle:bcprov-jdk15on
 commons-codec:commons-codec
 
