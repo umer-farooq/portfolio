@@ -1,3 +1,331 @@
+import boto3
+import csv
+import httpx
+import json 
+import base64
+import ssl
+import uuid
+import logging
+import os
+import io
+from base64 import b64decode
+from datetime import datetime
+from urllib.parse import unquote
+
+PASSWORD = 'p@ssw0rd'
+
+CLIENT_CERT =  r'C:\Users\O22665\Documents\Repo\pn-token-sync\code\ssl\uat\client.crt'
+
+SERVER_KEY = r'C:\Users\O22665\Documents\Repo\pn-token-sync\code\ssl\uat\client.key'
+
+CA_CERT = r'C:\Users\O22665\Documents\Repo\pn-token-sync\code\ssl\uat\certificate.pem'
+
+INTERNAL_API_KEY = 'j60AqcESvkfSDad5NMyy80Xl6fSq0HR6Fvlowjw6'
+ 
+'''
+
+Creation of SSL Context for ssl certificate verification.
+
+'''
+
+sslcontext = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+
+sslcontext.verify_mode = ssl.CERT_REQUIRED
+
+sslcontext.check_hostname = True
+
+sslcontext.load_verify_locations(cafile=CA_CERT)
+
+sslcontext.load_cert_chain(CLIENT_CERT,SERVER_KEY,PASSWORD)
+ 
+
+# Method to fetch customer data based on CIN
+def get_customer_data(cin):
+    #url= os.environ['GET_CUSTOMER_DETAILS']
+    url="https://kproxy-uat.pcdigital-dev.aeapps.bankfab.com/customer-profile/v2/customer-detail"
+    xref = str(uuid.uuid4())
+    headers = {'XREF': xref, 'CHANNELID': 'IB','LANGUAGE':'EN'}
+    currectDate = datetime.now()
+    data = {
+    "applicationArea": {
+        "countryOfOrigin": "AE",
+        "creationDateTime": str(currectDate),
+        "requiredExecutionDate": str(currectDate),
+        "senderId": "IB",
+        "transactionDateTime": str(currectDate),
+        "transactionId": xref,
+        "language": "EN"
+    },
+    "dataArea": {
+        "customerIdentifier": cin,
+        "accountingUnitIdentifier": "AE0010001"
+    }
+    }
+    data = json.dumps(data)
+    print("data")
+    print(data)
+    response = httpx.post(url,headers=headers, data=data, verify = sslcontext)
+    print("response")
+    print(response)
+    json_reponse = response.json()
+    if response.status_code == 200:
+        print(f"Customer detail response received for CIN : {cin}")
+        return json_reponse
+    else:
+        print(f"Customer detail Error response received for CIN : {cin}")
+        return None
+    
+if __name__ == '__main__':
+    get_customer_data("123456")
+
+{
+    "applicationArea": {
+        "countryOfOrigin": "AE",
+        "creationDateTime": "2024-08-23 13:08:10.554199",
+        "requiredExecutionDate": "2024-08-23 13:08:10.554199",
+        "senderId": "IB",
+        "transactionDateTime": "2024-08-23 13:08:10.554199",
+        "transactionId": "2ad0cdd5-9064-4fbb-a6d7-b86f5a5a8fc7",
+        "language": "EN"
+    },
+    "dataArea": {
+        "customerIdentifier": "3396985",
+        "accountingUnitIdentifier": "AE0010001"
+    }
+}
+
+{
+   "applicationArea":    {
+      "countryOfOrigin": "AE",
+      "senderId": "IB",
+      "transactionId": "2ad0cdd5-9064-4fbb-a6d7-b86f5a5a8fc7",
+      "transactionDateTime": "2024-08-23 13:08:10.554199",
+      "language": "EN",
+      "creationDateTime": "2024-08-23 13:08:10.554199",
+      "requiredExecutionDate": "2024-08-23 13:08:10.554199"
+   },
+   "responseStatus": {"status": "SUCCESS"},
+   "dataArea":    {
+      "fullName": "",
+      "prefix": "MR",
+      "birthDate": "1970-01-01",
+      "gender": "M",
+      "ltGender": "M",
+      "nationality": "PK",
+      "emirate": "UMQ",
+      "country": "Umm Al Quwain,ARE",
+      "maritalStatus": "MARRIED",
+      "isResident": "Y",
+      "shortName": "bansswap",
+      "customerIdentifier": "3396985",
+      "customerType": "Individual",
+      "customerOpenDate": "2010-07-21",
+      "accountingUnitIdentifier": "AE0010001",
+      "mothersMaidenName": "FGB SCRAMBLE OWN.CAR",
+      "placeOfBirth": "PK",
+      "amlSegment": "L",
+      "segment": "",
+      "isStaff": false,
+      "employment":       {
+         "employerName": "",
+         "employerName2": "FGB SCRAMBLE COMPANY NAME",
+         "monthlySalary": "100000.00",
+         "employmentStatus": ""
+      },
+      "additionalCustomerInfo":       {
+         "segment": "",
+         "customerRateSegment": "Premium",
+         "target": "30",
+         "accountOfficer": "142",
+         "language": "1",
+         "startDate": "2010-07-21",
+         "nameOnCard": "FGB SCRAMBLE CARD NAM",
+         "sector": "4000",
+         "profession": "Engineer",
+         "subSegment": "6202",
+         "relationshipManager": "",
+         "vatCategory": "004",
+         "constitution": "",
+         "dateOfBirth": "2013-03-14",
+         "otherOfficer":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "country":          [
+            "ARE",
+            "",
+            "",
+            ""
+         ],
+         "customerResidence":          [
+            "AE",
+            "",
+            "",
+            ""
+         ],
+         "ownerName":          [
+            "FGB SCRAMBLE OWNER NAME",
+            "",
+            "",
+            ""
+         ],
+         "ownerNationality":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "percentOwner":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "riskCategory": "",
+         "riskAgreement": "",
+         "relationCustomer":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "relationCode":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "reverseRelationCode":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "customerEducationalBackground": "",
+         "customerAgeClassification": "MAJOR",
+         "powerOfAttorneyFlag": "N"
+      },
+      "kycInfo":       {
+         "kycFlag": "",
+         "kycDate": "2010-07-21",
+         "kycExpiryDate": "2015-07-21",
+         "isKYCUsingEID": false
+      },
+      "identity":       [
+                  {
+            "identityType": "EMI",
+            "identityNumber": "",
+            "identityExpiryDate": "2021-04-12"
+         },
+                  {
+            "identityType": "VIS",
+            "identityNumber": "101201770341826",
+            "identityExpiryDate": "2020-11-26"
+         },
+                  {
+            "identityType": "PAS",
+            "identityNumber": "G1010101",
+            "identityExpiryDate": "2018-08-11"
+         }
+      ],
+      "address": [      {
+         "addressLine1": "PO Box 56865 Ggh No888",
+         "addressLine2": "Hamdan street EEkoc hi",
+         "city": "Umm Al Quwain,ARE",
+         "country": "ARE",
+         "postalCode": "56865"
+      }],
+      "contacts":       [
+                  {
+            "contactType": "PERSONAL",
+            "mobileNumber": "0563339289",
+            "phoneNumber": "",
+            "email": "kishore.abdulla@bankfab.com"
+         },
+                  {
+            "contactType": "OFFICE",
+            "phoneNumber": ""
+         }
+      ],
+      "accounts":       [
+                  {
+            "accountIdentifier": "1421003396985036",
+            "accountTitle": "FGB SCRAMBLE TITLE.1",
+            "postingRestriction": "",
+            "customerIdentifier": "3396985",
+            "currency": "AED",
+            "isActive": true,
+            "branchCode": "142",
+            "powerOfAttorney": ""
+         },
+                  {
+            "accountIdentifier": "2011003396985027",
+            "accountTitle": "FGB SCRAMBLE TITLE.1",
+            "postingRestriction": "",
+            "customerIdentifier": "3396985",
+            "currency": "AED",
+            "isActive": false,
+            "branchCode": "201",
+            "powerOfAttorney": ""
+         }
+      ],
+      "FATCA":       {
+         "isPoliticalExposed": "",
+         "pepPosition": "",
+         "isUSPersonForTaxPurpose": false,
+         "socialSecurityNumber": "",
+         "isTaxResidentOtherCountry": false,
+         "isResidentOfOtherJurisdiction": "",
+         "declarationIndicator": false,
+         "reasonForDeclarationDisagree": "",
+         "status": "",
+         "isReportable": false,
+         "otherNationalities":          [
+            "",
+            "",
+            "",
+            ""
+         ],
+         "nationality":          [
+            "PK",
+            "",
+            "",
+            ""
+         ],
+         "placeOfBirth": "",
+         "taxResidencies":          [
+                        {
+               "countryJurisdictionOfTaxResident": "",
+               "taxIdentificationNumber": "",
+               "reasonIfTINNotAvailable": "",
+               "comments": ""
+            },
+                        {
+               "countryJurisdictionOfTaxResident": "",
+               "taxIdentificationNumber": "",
+               "reasonIfTINNotAvailable": "",
+               "comments": ""
+            },
+                        {
+               "countryJurisdictionOfTaxResident": "",
+               "taxIdentificationNumber": "",
+               "reasonIfTINNotAvailable": "",
+               "comments": ""
+            },
+                        {
+               "countryJurisdictionOfTaxResident": "",
+               "taxIdentificationNumber": "",
+               "reasonIfTINNotAvailable": "",
+               "comments": ""
+            }
+         ]
+      }
+   }
+}
+
+
 Root Cause Analysis (RCA)
 
 Incident Summary:
