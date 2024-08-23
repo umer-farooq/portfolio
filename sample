@@ -1,5 +1,8 @@
-For MF-2444:  6th September release from IBMB  
-For MF-2445:  6th September will be tentative for now depending on test cases. However mark this 20th September.
+MF-2444: The release is scheduled for 6th September from IBMB.
+
+MF-2445: The 6th September release date is tentative and subject to the completion of test cases. However, please mark the final release date as 20th September.
+
+
 
 
 import boto3
