@@ -1,9 +1,13 @@
 
-The expectation is to get sign-off for:
-Capture Customer Relationship Manager Service with the new endpoint (/customer-profile/v2/rmDetails) which is currently setup in SIT and UAT. 
-Please verify that the new endpoint has no impact on the existing functionality.
+Request for Sign-off on Updated Service URL
 
+Dear [Recipient's Name],
 
+I hope this message finds you well. We have updated the service URL for the Capture Customer Relationship Manager to the new endpoint /customer-profile/v2/rmDetails. This update has been applied in both the SIT and UAT environments.
+
+Could you please verify that this new endpoint does not impact any existing functionality? Your confirmation will allow us to proceed with the sign-off.
+
+Thank you for your support.
 
 import boto3
 import csv
