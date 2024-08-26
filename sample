@@ -1,7 +1,7 @@
-MF-2444: The release is scheduled for 6th September from IBMB.
 
-MF-2445: The 6th September release date is tentative and subject to the completion of test cases. However, please mark the final release date as 20th September.
-
+The expectation is to get sign-off for:
+Capture Customer Relationship Manager Service with the new endpoint (/customer-profile/v2/rmDetails) which is currently setup in SIT and UAT. 
+Please verify that the new endpoint has no impact on the existing functionality.
 
 
 
