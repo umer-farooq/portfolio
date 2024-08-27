@@ -1,4 +1,3 @@
-
    When the customer tries to update /forget the pin in the login page.
 We can observer that the user_channel status gets change to ACTIVE_LOGIN_PENDING, 
 
@@ -16,6 +15,298 @@ We had logic of making the user channel status ACTIVE_LOGIN_PENDING  ACTIVE w
 But in the new implementation ,
 accesscontrol/cred/v4/verify( VerifyUserLoginV2SF)
 we don’t have that logic to make user channel status ACTIVE_LOGIN_PENDING  ACTIVE .
+
+
+   /**
+	 * Verify Login Credentials
+	 * USAGE: LOGIN,REGISTRATION (LAST STEP)
+	 * @param request
+	 * @return VerifyUserLoginResponse
+	 */
+	//@Interceptors(TracingInterceptor.class)
+	public VerifyUserLoginResponse verify(VerifyUserLoginRequest request, boolean isPayit) {
+		VerifyUserLoginResponse verifyUserLoginResponse = new VerifyUserLoginResponse();
+		return  execute(request,verifyUserLoginResponse, req->{
+			verifyUserLoginResponse.setCurrentDate(DateTimeHelper.INSTANCE.formatDate(new Date(), AppConstants.DATE_DDMMYYYY));
+			SessionInfo session = SessionContext.getSession();
+			String cif = session.getUserId();
+			String deviceID = session.getDeviceID();
+			String convID = session.getConvID();
+			ChannelType channelType = session.getChannelType();
+			log.info("verify call Cif:{}, Origin:{}, ChannelType:{}, convID:{}", cif, session.getUser()==null? null: session.getUser().getUserOrigin(), channelType, convID);
+
+			ChannelInfo channelInfo  = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+			channelValidator.validateChannelInfo(channelInfo, channelType);
+
+			boolean pwdMatched = false;
+			UserChannel userChannel = null;
+			// String status = null;
+			//boolean isCallsignEnabledForPublic = settingsRepository.isCallsignAuthPublicEnabled();
+			//boolean isCallsignEnabledForCust = channelInfoRepository.isCallsignAuthEnabled(cif);
+			if(ChannelType.BROWSER == channelType) {
+				checkTrottle();
+				userChannel = getUserChannel(cif, channelType);
+				if(Objects.nonNull(userChannel)) {
+					// Load Customer position
+					mqNotifier.refreshCustomerPositionCache(userChannel.getCin());
+				}
+
+				/* Commented below code for PRM-2076
+				 * if(ChannelStatus.ACTIVE_PENDING_LOGIN == userChannel.getStatus()) {
+					if(session.getUser().getUserOrigin() == UserOrigin.NBAD){
+						String username = null;
+						if(StringUtils.isNotBlank(userChannel.getUserName())){
+							username = userChannel.getUserName();
+						}else{
+							log.warn("Username is not present in migrated NBAD customer data to authenticate");
+							username = request.getUserName();							
+						}
+						status = nbadUserAuthServiceInvoker.authenticateNbadUser(username, request.getPwd1());
+						pwdMatched = AppConstants.SUCCESS.equals(status)?true:false;
+						log.info("NBAD PWD status check completed :{}",pwdMatched);
+						
+					} else if (session.getUser().getUserOrigin() == UserOrigin.FGB){
+						String diPwd = channelInfoRepository.fetchDiUserId(cif);
+						pwdMatched =  Objects.isNull(userChannel.getPwd()) ? false : PwdHelper.matchDigests(request.getPwd1(), diPwd);
+						if(pwdMatched){
+							status = AppConstants.SUCCESS;
+						}
+						log.info("FGB PWD status check completed :{}",pwdMatched);
+					}
+					
+					if(Objects.nonNull(status ) &&AppConstants.SUCCESS.equalsIgnoreCase(status)) {
+						verifyUserLoginResponse.setStartPage(FORCE_PASSWORD_UPDATE_FLOW);
+						pwdMatched = true;
+					}
+				} else {*/
+					pwdMatched =  Objects.isNull(userChannel.getPwd()) ? false : PwdHelper.match(userChannel.getPwd(), request.getPwd());
+				//}
+				
+				if(pwdMatched){
+					checkUsernameConstraints(verifyUserLoginResponse, userChannel);
+					preferencesRepository.updateUserAlertPreference(cif, ContentID.LOGIN_SUCCESS.name(), false, EMAIL);
+				}
+			// Mobile device
+			} else {
+				//channelValidator.isForceAppUpdateRequired(session);
+				userChannel = userChannelRepository.fetchUserChannelByUserIDAndDeviceIDActive(cif, deviceID);
+				
+				//FMDB-47518-changes
+				
+				if(Objects.nonNull(userChannel) && Objects.nonNull(request.getPushSettings())) {
+						log.info("Populating the Push Settings value");
+						userChannel.setPushSettings(request.getPushSettings());
+				}
+				//FMDB-47518-changes end
+				
+				channelValidator.verifyCifDeviceMatch(request.getDeviceID(), cif, deviceID);
+				boolean isCallsignMigrated = TextUtils.INSTANCE.getBoolean(userChannel.getCallsignMigrate());
+				if (isCallsignMigrated) {
+					pwdMatched = verifyLoginTransactionWithCs(req, true);
+				} else {
+					pwdMatched = Objects.isNull(userChannel.getPwd()) ? false : PwdHelper.match(userChannel.getPwd(), request.getPwd());
+				}
+				if(pwdMatched) {
+					preferencesRepository.updateUserAlertPreference(cif, ContentID.LOGIN_SUCCESS.name(), false, EMAIL);
+					//SMS should be disabled
+					preferencesRepository.updateUserAlertPreference(cif, ContentID.LOGIN_SUCCESS.name(), false, AppConstants.SMS);
+				}
+			}
+			
+			if (Objects.isNull(channelInfo)){
+				log.error("Inconsistent data.. User data exists in USER_CHANNEL but not in CHANNEL_INFO table. for CIF:{} and channel:{}", cif, channelType);
+				throw new AppException(ErrorCodes.SYS_INVALID_CONDITION,false);
+			}
+
+			log.info("userChannel {} | deviceID {} | cif {} | pwdMatched {} | convID {} ",userChannel,deviceID,cif ,pwdMatched ,convID);
+			boolean isLoginRequestComing4mRegistrationFlow = isLoginRequestComing4mRegistrationFlow(userChannel);
+			//updateChannelAndAccessInfo(pwdMatched, userChannel, channelInfo);
+			updateChannelAndAccessInfo(pwdMatched, userChannel, channelInfo);
+			
+			if(!pwdMatched){
+				notifyPasswordFailure(userChannel);
+				return populateErrorResponse(verifyUserLoginResponse,userChannel);
+			} 
+			String cin = session.getUser().getCin();
+			boolean isLoggedinSuccess = true;
+			String refId = updateReferenceId(session.getUser(), channelInfo);
+			if (isLoginRequestComing4mRegistrationFlow && ChannelStatus.ACTIVE_PENDING_LOGIN != userChannel.getStatus()) {
+				enrichLoginResponse(verifyUserLoginResponse, cif, convID, deviceID, userChannel, channelType, cin, 
+						isPayit, request.getVersion(), false);
+				verifyUserLoginResponse.setRiskEvaluationAdvice(RiskAction.ALLOW.name());
+				verifyUserLoginResponse.setRiskEvaluationDeviceId(null);
+				log.info("update customer as verified");
+				sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+			// This will come only when Mobile user come from forgot PIN flow to exclude RBA
+			} else if (ChannelStatus.ACTIVE_PENDING_LOGIN == userChannel.getStatus() && channelType == ChannelType.MOBILE) {
+				log.info("bypassing RBA call for only Mobile device and ACTIVE_PENDING_LOGIN status");
+				userChannel.setStatus(ChannelStatus.ACTIVE);
+				userChannelRepository.updateUserChannel(userChannel);
+				enrichLoginResponse(verifyUserLoginResponse, cif,convID, deviceID, userChannel, channelType, cin,
+						isPayit, request.getVersion(), false);
+				log.info("update customer as verified");
+				sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+			} else {
+				/*int deviceCount = channelValidator.noOfCsMobileRegistration(cif);
+				if ((!isCallsignEnabledForPublic && !callsignAuthHelper.isPilotCustomerForCallsign(session, channelType,isCallsignEnabledForCust))
+						|| (deviceCount == 0 && ChannelType.BROWSER == channelType)) {
+					log.info("Checking RBA for convID:{}, channel:{} and CIF:{}", convID, channelType, cif);
+					riskSF.evaluateRisk(request, cif, verifyUserLoginResponse, false, channelType);
+					if (RiskAction.INCREASEAUTH.name().equals(verifyUserLoginResponse.getRiskEvaluationAdvice())) {
+						isLoggedinSuccess = false;
+						processRiskAdvice(verifyUserLoginResponse, convID, cif,userChannel);
+					} else if (RiskAction.ALLOW.name().equals(verifyUserLoginResponse.getRiskEvaluationAdvice())) {
+						enrichLoginResponse(verifyUserLoginResponse, cif,convID, deviceID, userChannel, channelType, cin, isPayit, request.getVersion());
+						log.info("update customer as verified");
+						sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+					}*/
+//				} else {
+					log.info("Callsign is enabled skipping RBA rules and initiating request to callsign.");
+					isLoggedinSuccess = false;
+
+					/*if (Objects.isNull(request.getCsTransactionRequest()) || 
+							(Objects.nonNull(request.getCsTransactionRequest()) 
+									&& (StringUtils.isBlank(request.getCsTransactionRequest().getCsTransactionId())
+											|| request.getCsTransactionRequest().getTransactionType() == null))) {
+						throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+					}*/
+					
+					boolean isCallsignMigrated = TextUtils.INSTANCE.getBoolean(userChannel.getCallsignMigrate());
+					/**
+					 * verification for callsign migration
+					 */
+					if(!isCallsignMigrated) { // Only when the user is not created in callsign, create user
+						/**
+						 * Create user in scim
+						 */
+						APIResponse createUserRes = csUserManagementSF.createUser(refId);
+
+						if (!createUserRes.getResult().isSuccess()) {
+							throw new AppException(ErrorCodes.CS_CREATE_USER_FAILED);
+						}
+					}
+					
+					if(channelType == ChannelType.BROWSER) {
+						String val = settingsRepository.getSetting(AppConstants.IB_WHATS_NEW_SCREEN);
+						verifyUserLoginResponse.setIbWhatsNewScreen(TextUtils.INSTANCE.getBoolean(val));
+
+						// Initiate Transaction for push notification etg
+						CsTransactionResponse etgResponse = csTransactionSF.initiateTransaction(request.getCsTransactionRequest());
+						
+						if(!etgResponse.getResult().isSuccess()) {
+							String message = etgResponse.getEtgTransactionResponse().getMessage();
+							log.error("VerifyUserLogin - message : {}", message);
+							if (StringUtils.isNotBlank(message)
+									&& (message.equals(AppConstants.REG_MOBILE_CHANNEL_LOCKED)
+											|| message.equals(AppConstants.RESET_MOBILE_CHANNEL_LOCKED)
+											|| message.equals(AppConstants.LOGIN_MOBILE_CHANNEL_LOCKED))) {
+								csTransactionHelper.processErrorBasedOnMessage(message);
+							} else {
+								throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+							}
+						}
+						
+						/*CsTransactionRequest csTransactionRequest = request.getCsTransactionRequest();
+						csTransactionRequest.setAuthenticator(etgResponse.getEtgTransactionResponse().getAuthenticator());
+						csTransactionRequest.setRequirementsCombination(etgResponse.getEtgTransactionResponse().getRequirementsCombination());
+						csTransactionRequest.setRequirementId(etgResponse.getEtgTransactionResponse().getRequirementId());
+						
+						csTransactionRequest.setSuccessResultMap(true);
+						log.info("VerifyUserLoginSF.verify. verifying login request with context : {}",csTransactionRequest);
+						CsTransactionResponse etgUpdateResponse = csTransactionSF.updateTransaction(csTransactionRequest);
+						
+						if(!etgUpdateResponse.getResult().isSuccess()) {
+							throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+						}*/
+						
+						if(etgResponse.getEtgTransactionResponse().getDecision() == DecisionEnum.REFER) {
+							verifyUserLoginResponse.setCsTxnActiveAllowedAttempts(etgResponse.getCsTxnActiveAllowedAttempts());
+							verifyUserLoginResponse.setCsTxnActiveMaxResendAttempts(etgResponse.getCsTxnActiveMaxResendAttempts());
+							verifyUserLoginResponse.setCsTxnActiveTimeInSeconds(etgResponse.getCsTxnActiveTimeInSeconds());
+						} else if(etgResponse.getEtgTransactionResponse().getDecision() == DecisionEnum.ALLOW) {
+							verifyUserLoginResponse.setRiskEvaluationAdvice(AppConstants.ALLOW);
+							sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+							enrichLoginResponse(verifyUserLoginResponse, cif, convID, deviceID, userChannel, channelType, cin, 
+									isPayit, request.getVersion(), false);
+							isLoggedinSuccess = true;
+							//Update user channel to callsign migrated to Y.
+							if(!isCallsignMigrated) { 
+								userChannel.setCallsignMigrate(AppConstants.Y);
+								userChannelRepository.updateUserChannel(userChannel);
+							}
+						}
+						
+						verifyUserLoginResponse.setEtgTransactionResponse(etgResponse	.getEtgTransactionResponse());
+						verifyUserLoginResponse.getEtgTransactionResponse().clearPIIData();
+						
+						//If ALLOW, set isLoggedinSuccess to true
+					} else {
+						if(sessionRepository.isOtpREtgVerfied(convID)) {
+							isLoggedinSuccess = true;
+							enrichLoginResponse(verifyUserLoginResponse, cif, convID, deviceID, userChannel, channelType, cin,
+									isPayit, request.getVersion(), false);
+						} 
+					}
+//				}
+			}
+
+			enrichPostLoginDetails(verifyUserLoginResponse, session, cif, convID, channelType, userChannel, cin,
+					isLoggedinSuccess);
+			
+			return verifyUserLoginResponse;
+		});
+	}
+   
+   
+   -----------------------------------------------------------------
+   
+   /**
+	 * Verify Login Credentials
+	 * USAGE: LOGIN (LAST STEP)
+	 * @param request
+	 * @return VerifyUserLoginResponse
+	 */
+	public VerifyUserLoginResponse verify(VerifyUserLoginRequest request) {
+		VerifyUserLoginResponse response = new VerifyUserLoginResponse();
+		return execute(request, response, req ->{
+			log.info("Verify callsign transaction is success or not.");
+			
+			SessionInfo session = SessionContext.getSession();
+			String cif = session.getUserId();
+			String deviceID = session.getDeviceID();
+			String convID = session.getConvID();
+			ChannelType channelType = session.getChannelType();
+			log.info("verify call Cif:{}, Origin:{}, ChannelType:{}, convID:{}", cif, session.getUser()==null? null: session.getUser().getUserOrigin(), channelType, convID);
+			
+			ChannelInfo channelInfo  = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+			if (Objects.isNull(channelInfo)){
+				log.error("Inconsistent data.. User data exists in USER_CHANNEL but not in CHANNEL_INFO table. for CIF:{} and channel:{}", cif, channelType);
+				throw new AppException(ErrorCodes.SYS_INVALID_CONDITION,false);
+			}
+			channelValidator.validateChannelInfo(channelInfo, channelType);
+			channelValidator.verifyCifDeviceMatch(request.getDeviceID(), cif, deviceID);
+			
+			UserChannel userChannel = userChannelRepository.fetchUserChannelByUserIDAndDeviceIDActive(cif, deviceID);
+			
+			CsTransactionResponse transactionWithOtp = csTransactionSF.transactionWithOtp(request.getCsTransactionRequest());
+			mapCSResponse(response, transactionWithOtp);
+			
+			if(transactionWithOtp.getResult().isSuccess() &&
+					transactionWithOtp.getEtgTransactionResponse().getDecision() == DecisionEnum.ALLOW) {
+				log.info("Transaction verification is successful with callsign.. enrich verify response...");
+				String cin = session.getUser().getCin();
+				enrichSuccessResponse(request, response, cif, cin, deviceID, convID, channelType, channelInfo, userChannel);
+				
+			} else {
+				if(!transactionWithOtp.getResult().isSuccess()) {
+					verifyUserLoginSF.updateChannelAndAccessInfo(false, userChannel, channelInfo);
+					throw new AppException(ErrorCodes.valueOf(transactionWithOtp.getResult().getErrorInfo().getCode()));
+				}
+			}
+			return response;
+		}) ;
+		
+	}
 
 
    /**
