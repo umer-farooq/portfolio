@@ -1,6 +1,246 @@
 #!/usr/bin/env python3
 import os
 import json
+import csv
+import base64
+import uuid
+import io
+from datetime import datetime
+from urllib.parse import unquote
+import pbcore.logger as logger
+import pbcore.header as header
+import pbcore.sslcontext as sslcont
+import pbcore.aws.secretstore as secretstore
+import boto3  # Updated: Use boto3 for S3
+
+# Initialize the S3 client using boto3
+s3_client = boto3.client('s3')  # Updated: Use boto3 client for S3 operations
+
+
+# Defining Constant variables
+COMMA_DELIMETER = ','
+
+# Creation of SSL Context for SSL certificate verification using pbcore's sslcontext.
+if(LAMBDA_FUNCTION is not None):
+    ssl_context = sslcont.get_ssl_context()
+else:
+    ssl_context = sslcont.get_ssl_context_local('uat')
+    
+# CSV column mapping with Object fields
+csv_column_mapping = {
+    'customerId': 'CIN', 
+    'cif': 'CIF', 
+    'fullName': 'CM Name', 
+    'target': 'Target Code', 
+    'segment': 'Business Segment', 
+    'accountOfficer': 'Branch', 
+    'relationshipManager': 'RM', 
+    'nationality': 'Nationality', 
+    'login_attempts': 'Total Login Attempts', 
+    'no_of_days': 'Login Period (no. of Days)'
+}
+
+# Lambda handler
+def handler(event, content):
+    logger.info(f"Event received from S3: {event}")
+    s3_bucket = event['Records'][0]['s3']['bucket']['name']
+    s3_key = event['Records'][0]['s3']['object']['key']
+    s3_key = unquote(s3_key)
+    logger.info(f"Unquote S3 key: {s3_key}")
+
+    # Fetch the file from S3 using boto3
+    response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)  # Updated: Fetch file from S3 using boto3
+    csv_content = response['Body'].read().decode('utf-8')
+
+    # Process the CSV content
+    processor(io.StringIO(csv_content), s3_key)
+
+# Method to read CSV data and calculate login attempts and number of days
+def read_csv(csv_data):
+    user_activity_dict = {}
+    data = []
+    reader = csv.reader(csv_data)
+    header = next(reader, None)
+    data.append(header)
+
+    for row in reader:
+        if row:
+            rawTime = row[2].split('.')
+            row[2] = ' ' + rawTime[0] + ''
+        data.append(row)
+        user_id = row[0].strip()
+        if user_id not in user_activity_dict:
+            unique_transaction_date = set()
+            unique_transaction_date.add(row[2].strip().split(' ')[0])
+            user_activity_dict[user_id] = {
+                'transaction_date': unique_transaction_date, 
+                'no_of_days': 0, 
+                'login_attempts': 0
+            }
+            transaction_type = row[5].strip()
+            if transaction_type.lower().find('login') != -1:
+                user_activity_dict[user_id]['no_of_days'] += 1
+                user_activity_dict[user_id]['login_attempts'] += 1
+        else:
+            transaction_date = user_activity_dict[user_id]['transaction_date']
+            transaction_type = row[5].strip()
+            if transaction_type.lower().find('login') != -1:
+                if row[2].strip().split(' ')[0] not in transaction_date:
+                    transaction_date.add(row[2].strip().split(' ')[0])
+                    user_activity_dict[user_id]['no_of_days'] += 1
+                    user_activity_dict[user_id]['login_attempts'] += 1
+                else:
+                    user_activity_dict[user_id]['login_attempts'] += 1
+
+    with open('/tmp/output.csv', 'w', newline='') as outputFile:
+        writer = csv.writer(outputFile)
+        writer.writerows(data)
+    logger.info("CSV file is copied to the temp location")
+    return user_activity_dict
+
+# Method to update user activity dictionary with customer data
+def update_user_activity_dict(user_details, user_activity_dict):
+    userlist = user_details.get('userList', [])
+    userlist_map = {next(iter(item.keys())): next(iter(item.values())) for item in userlist}
+
+    for map_values in userlist_map:
+        values = user_activity_dict[map_values]
+        values["customerId"] = userlist_map[map_values]["customerId"]
+        values["cif"] = userlist_map[map_values]["cif"]
+        json_response = get_customer_data(userlist_map[map_values]["customerId"])
+
+        try:
+            values["fullName"] = json_response["dataArea"]["fullName"]
+            values["target"] = json_response["dataArea"]["additionalCustomerInfo"]["target"]
+            values["segment"] = json_response["dataArea"]["additionalCustomerInfo"]["segment"]
+            values["accountOfficer"] = json_response["dataArea"]["additionalCustomerInfo"]["accountOfficer"]
+            values["relationshipManager"] = json_response["dataArea"]["additionalCustomerInfo"]["relationshipManager"]
+            values["nationality"] = json_response["dataArea"]["nationality"]
+        except:
+            logger.error(f"Error in parsing JSON response: {json_response}")
+
+# Method to write updated CSV content back to temp location        
+def write_csv(temp_file_location, user_activity_dict):
+    with open(temp_file_location, 'r') as file:
+        csv_data = list(csv.DictReader(file))
+
+        for row in csv_data:
+            row_key = row.get('USER_NAME')
+            values = user_activity_dict.get(row_key)
+            if values:
+                for json_key, csv_column in csv_column_mapping.items():
+                    row[csv_column] = values.get(json_key, row.get(csv_column))
+
+    fieldnames = [
+        'USER_NAME', 'USER_ID', 'TIMESTAMP', 'TRANSACTION_ID',
+        'IP_ADDRESS', 'TRANSACTION_TYPE', 'COUNTRY', 'CIN', 'CIF',
+        'CM Name', 'Target Code', 'Business Segment', 'Branch', 'RM',
+        'Nationality', 'Total Login Attempts', 'Login Period (no. of Days)'
+    ]
+
+    with open(temp_file_location, 'w', newline='') as outputFile:
+        writer = csv.DictWriter(outputFile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(csv_data)
+    logger.info("Updated CSV file written to temp location")
+
+# Method to send email with CSV attachment
+def send_mail(csv_data_in_bytes, s3_file_name):
+    if csv_data_in_bytes is not None:
+        currectDate = datetime.now().date()
+        email_subject = "Sanctioned country report_" + currectDate.strftime("%Y-%m-%d")
+        split_array = s3_file_name.split('/')
+        s3_file_name=split_array[-1]
+        s3_file_name = s3_file_name.replace(':','_')
+        url = os.environ['SEND_EMAIL_SERVICE_URL']
+
+        headers = header.update_headers({
+            'XREF': str(uuid.uuid4()),
+            'CHANNELID': 'AWS',
+            'content-type': 'application/json'
+        })
+
+        to_address_list = os.environ['TO_ADDRESS'].split(COMMA_DELIMETER)
+
+        data = {
+            "sourceSystem": "FAB",
+            "requestID": str(uuid.uuid4()),
+            "fromAddress": "noreply@bankfab.com",
+            "entityName": "FAB",
+            "toAddress": to_address_list,
+            "emailSubject": email_subject,
+            "emailBodyContent": "",
+            "emailBodyContentType": "TEXT",
+            "attachment": [{
+                "attachementBytes": str(csv_data_in_bytes.decode("utf-8")),
+                "mimeType": "application/csv",
+                "fileName": s3_file_name
+            }]
+        }
+
+        data = json.dumps(data)
+
+        response = boto3.client('lambda').invoke(  # Updated: Use boto3 for Lambda invocation
+            FunctionName=url,
+            InvocationType='RequestResponse',
+            Payload=json.dumps(data)
+        )
+        if response['StatusCode'] == 200:
+            logger.info("Email sent successfully")
+        else:
+            logger.error(f"Failed to send email. Status code: {response['StatusCode']}")
+    else:
+        logger.error("csv_data_in_bytes is null")
+
+# Method to fetch user details
+def fetch_user_details(transaction_ids):
+    url = os.environ['FETCH_CIN_CIF_BY_REFID_URL']
+
+    headers = header.update_headers({
+        'XREF': str(uuid.uuid4()),
+        'CHANNELID': 'IB',
+        'content-type': 'application/json'
+    })
+
+    data = json.dumps(transaction_ids)
+
+    response = boto3.client('lambda').invoke(  # Updated: Use boto3 for Lambda invocation
+        FunctionName=url,
+        InvocationType='RequestResponse',
+        Payload=json.dumps(data)
+    )
+
+    if response['StatusCode'] == 200:
+        logger.info("User details fetched successfully")
+        return response['Payload'].read().decode('utf-8')
+    else:
+        logger.error(f"Failed to fetch user details. Status code: {response['StatusCode']}")
+        return None
+
+# Processor method
+def processor(csv_data, s3_file_name):
+    user_activity_dict = read_csv(csv_data)
+    temp_file_location = "/tmp/output.csv"
+
+    user_ids_list = list(user_activity_dict.keys())
+    json_response = fetch_user_details(user_ids_list)
+
+    if json_response:
+        update_user_activity_dict(json.loads(json_response), user_activity_dict)
+        write_csv(temp_file_location, user_activity_dict)
+        file_in_bytes = convert_attachment_in_bytes(temp_file_location)
+        send_mail(file_in_bytes, s3_file_name)
+    else:
+        logger.error("JSON response is null")
+
+if __name__ == '__main__':
+    input = r"C:\Users\O25420\Docs\python\test1r.csv"
+    processor(input)
+
+------*************************************
+#!/usr/bin/env python3
+import os
+import json
 import service.CustomerProfile as customer_profile
 import service.EFRService as efr_service
 import pbcore.logger as logger
