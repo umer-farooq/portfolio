@@ -1,3 +1,12 @@
+		new SanctionCountryReportIAmRoleStack(app, "sanction-country-report-iam-stack", StackProps.builder()
+				.stackName("A0-sanction-country-report-s3-lambda-iam-stack").synthesizer(synthesizer).build());
+		new SanctionCountryReportS3LambdaStack(app, "sanction-country-report-s3-lambda-stack", StackProps.builder()
+				.stackName("A1-sanction-country-report-s3-lambda-stack").synthesizer(synthesizer).build());
+
+
+
+
+
 #!/usr/bin/env python3
 import os
 import json
