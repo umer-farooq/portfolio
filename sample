@@ -1,3 +1,396 @@
+#!/usr/bin/env python3
+import os
+import json
+import service.CustomerProfile as customer_profile
+import service.EFRService as efr_service
+import pbcore.logger as logger
+import pbcore.header as header
+import pbcore.sslcontext as sslcont
+import pbcore.aws.secretstore as secretstore
+from enums.EventAction import EventAction
+import service.APIGatewayService as api_gateway_service
+from enums.EventStatus import EventStatus
+import helper.StpValidation as stp_validation
+import helper.BpmsProcessor as bpms_processor
+
+LAMBDA_FUNCTION = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+ENV = os.environ.get("ENVIRONMENT")
+
+'''
+    Creation of SSL Context for ssl certificate verification.
+    for aws lambda use getsslcontext to get certificates
+    for local testing use getsslcontextlocal(environmentname) to get certificate
+
+    Get INTERNAL_GATEWAY_KEY from secret store
+'''
+if(LAMBDA_FUNCTION is not None):
+    ssl_context = sslcont.get_ssl_context()
+    INTERNAL_API_KEY = secretstore.get_secret_value('AWS_IBMB_INTERNAL_API_GATEWAY_KEY_'+ ENV)
+else:
+    ssl_context = sslcont.get_ssl_context_local('uat')
+    INTERNAL_API_KEY = 'j60AqcESvkfSDad5NMyy80Xl6fSq0HR6Fvlowjw6'
+
+
+'''
+    Lambda handler for processing the records for kyc upload processor with EFR.
+'''
+def handler(event,context):
+    if event:
+        batch_item_failures = []
+        sqs_batch_response = {}
+        logger.info(f"event received from SQS : {event}")
+        sqs_message = event.get("Records")
+        if sqs_message is not None and len(sqs_message) > 0:
+            for message in sqs_message:
+                message_id = message["messageId"]
+                #### extracting body from sqs event
+                message_body = message["body"]
+                message_body = json.loads(message_body)
+                final_message_body = message_body["Message"]  
+                ##### converting message body to json
+                final_message_body = json.loads(final_message_body)
+                message_headers = final_message_body["headers"]
+                message_data = final_message_body["data"]
+                message_headers = header.update_headers(message_headers, message_data)
+                logger_data = logger.prepare_logger_data(message_headers, message_data)
+                logger.info(f"message id : {message_id}", **logger_data)
+                logger.info(f"headers received from SQS: {message_headers}", **logger_data)
+                logger.info(f"Data received from SQS: {message_data}", **logger_data)
+                try:
+                    service_orchestrator(message_data, message_headers, logger_data)
+                except Exception as e:
+                    logger.error(f'An unexpected error occurred : {e}', **logger_data)
+                    batch_item_failures.append({"itemIdentifier": message_id})
+            sqs_batch_response["batchItemFailures"] = batch_item_failures
+            logger.info(f"sqsBatchResponse: {sqs_batch_response}", **logger_data)
+            return sqs_batch_response
+
+'''
+    Method to orchestrate Service for EFR and DMS upload
+'''
+def service_orchestrator(message_data, message_headers, logger_data):
+    efr_get_data_response = efr_service.get_efr_data_by_conv_id(message_data, message_headers, logger_data, ssl_context, INTERNAL_API_KEY)
+    get_customer_data_from_t24 = customer_profile.get_customer_details_from_t24(message_data, message_headers, logger_data, ssl_context)
+    efr_status = message_data.get("efrStatus")
+    logger.info(f"EFR Status Code : {efr_status}", **logger_data)
+    stp_flag, processed_flag = "N", "N"
+    if efr_status == 'EFR_DOCUMENT_UPLOAD_COMPLETED':
+        logger.info(f"efrJourneyStatus is : {efr_status}", **logger_data)
+        validate_data_for_stp_flow_flag = stp_validation.validate_data_for_stp_flow(efr_get_data_response, get_customer_data_from_t24, logger_data)
+        logger.info(f"In case validate data for stp flow is: {validate_data_for_stp_flow_flag}", **logger_data)
+        if validate_data_for_stp_flow_flag:
+            stp_flag = "Y" 
+            api_gateway_service.publish_events_async(message_data, message_headers, logger_data, ssl_context, INTERNAL_API_KEY, EventAction.EFR_DATA_VALIDATION.name, EventStatus.SUCCESS.name, None, None) 
+            update_customer_details = customer_profile.update_t24_customer_details(message_data, efr_get_data_response, get_customer_data_from_t24, message_headers, logger_data, ssl_context)
+            logger.info(f"Update T24 Customer Details Status : {update_customer_details}", **logger_data)
+            # check the status of update customer details service call
+            if (update_customer_details == "UPDATE_SUCCESS" 
+                or update_customer_details ==  "NO_CUSTOMER_UPDATE"): 
+                logger.info(f"After Update Customer Details able to Proceed Processed Flow", **logger_data)
+                processed_flag = "Y"
+                logger.info(f" STP: {stp_flag}, Processed : {processed_flag}. Get Updated T24 customer Data for {update_customer_details} ", **logger_data)
+                bpms_processor.trigger_stp_bpms_posting(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24, message_data, message_headers, logger_data, ssl_context)
+            elif isinstance(update_customer_details, dict) :
+                logger.info(f" STP: {stp_flag}, Processed : {processed_flag}. Updating T24 customer Data got failed and returned error Code & Description, {update_customer_details}", **logger_data)
+                processed_flag = "N"
+                bpms_processor.trigger_stp_non_processed_bpms_posting(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24, message_data, message_headers, update_customer_details, logger_data, ssl_context)
+            else:
+                logger.info(f" STP: {stp_flag}, Processed : {processed_flag}. Updating T24 customer Data got failed and return Error Exception {update_customer_details}", **logger_data)
+                # edge case need to clarify
+                processed_flag = "N"
+                bpms_processor.trigger_stp_non_processed_bpms_posting(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24, message_data, message_headers, None, logger_data, ssl_context)
+        #### invoke Notification Service
+        else:
+           api_gateway_service.publish_events_async(message_data, message_headers, logger_data, ssl_context, INTERNAL_API_KEY, EventAction.EFR_DATA_VALIDATION.name, EventStatus.FAILURE.name, None, None) 
+           logger.info(f" STP: {stp_flag}, Processed : {processed_flag}. In case validate data for stp flow is: {validate_data_for_stp_flow_flag}", **logger_data)
+           bpms_processor.trigger_non_stp_bpms_posting(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24,message_data, message_headers, logger_data, ssl_context)
+    elif efr_status == 'EFR_FAILURE':
+        logger.info(f" STP: {stp_flag}, Processed : {processed_flag}. In case EFR Failure", **logger_data)
+        bpms_processor.trigger_non_stp_bpms_posting(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24,message_data, message_headers, logger_data, ssl_context)
+
+
+# if __name__ == '__main__':
+#     #event = {'Records': [{'messageId': 'bca38d1e-91a0-4559-9e03-bacd54e2365b', 'receiptHandle': 'AQEBiNg5NYVJVOitF73rWHhUsUTqT0WQgPmMFB38GoKg9UO3LYFxOiXQUp3IdATo38aplxaaiPhGAslrpMWvf1aywJIeaYd/t+UKLyTcweAWM52d9nTeyPf1y2VUq/3Gm4sLXq+y9wxS0PAFHpXf1pWVGkyutKzhO9PxKVWXxO802BKX20UHaA54Myey4bhYsB9jcFbzTb9vOZLDvNMy3Pf2U8K74sUABH8XWgXXr8g9wmpkRzpq3Tk5yHDzv7IK5J9QtLylbEDF/x6X13h6epaYvsEJGpif/CR3AjGRFMKZluHvpCzMgfcIr2Qn0LA1oqfnLAVuK0tBth5VBs0jfuoKOo/VrNFfk8bis6Z+E/eKoM19sJ8U1bj3NLlpyFSu/l4tAtMbMBvt1c7j4CgSpIqLtoee3f9axI8QdVOyMI2v4GU=', 'body': '{\n  "data" : {\r\n    "queueName": "efr-document-upload-uat",\r\n    "convId": "9a583974260e4ca1910bf3bad2e57b02",\r\n    "customerId": "565656",\r\n    "journey": "KYC_UPLOAD",\r\n    "efrJourneyStatus": "SUCCESS",\r\n    "requestedBy": "efr-documnet-upload"\r\n},\n  "headers": {\n        "Accept": "*\\/*" ,\n        "Accept-Encoding": "gzip, deflate, br" ,\n        "Content-Type": "application\\/json" ,\n        "Cookie": "BIGipServervim6a8s0WbVja\\/7YOr9aUg=!VfgFFE 450OTwYtoDqTKsUPsC0Fa4ZR6HMF6dWGJ1zyumrEsQR w3VMX4gewkHOSsutwkgOiaBEzM9A=" ,\n        "Host": "internalretailapi-uat.bankfab.com" ,\n        "Postman-Token": "e4517c87-8496-419a-8d79-64d84418f2a7" ,\n        "User-Agent": "PostmanRuntime\\/7.26.5" ,\n        "x-amzn-cipher-suite": "ECDHE-RSA-AES128-GCM-SHA256" ,\n        "x-amzn-tls-version": "TLSv1.2" ,\n        "x-amzn-vpc-id": "vpc-05bb082fa47361dc5" ,\n        "x-amzn-vpce-config": "1" ,\n        "x-amzn-vpce-id": "vpce-09f935921e24d61d6" ,\n        "x-api-key": "j60AqcESvkfSDad5NMyy80Xl6fSq0HR6Fvlowjw6" ,\n        "x-apigw-api-id": "5n9ib4nxlk" ,\n        "X-Forwarded-For": "10.125.21.105, 172.28.184.78" \n      }\n}', 'attributes': {'ApproximateReceiveCount': '1', 'AWSTraceHeader': 'Root=1-65c6048b-a0f4297b0faa2514efd82c4c', 'SentTimestamp': '1707476108046', 'SenderId': 'AROAXRA5ZLPO6PSCNEQFQ:BackplaneAssumeRoleSession', 'ApproximateFirstReceiveTimestamp': '1707476113046'}, 'messageAttributes': {}, 'md5OfBody': '60bb8acdc77b0127a34d8a86e51d0b80', 'eventSource': 'aws:sqs', 'eventSourceARN': 'arn:aws:sqs:me-central-1:517606038493:efr-document-upload-uat', 'awsRegion': 'me-central-1'}]}
+#     event = {'Records': [{'messageId': '1aed51bd-6d0d-49c8-ba93-19a63382e898', 'receiptHandle': 'AQEBXici3zjgwINuGp3ipDB9MRW8LcE82NT6Wf6IH2LwZu75hl1hZkTrB+z7nx6YzJ0DSBTS1ZLkpHKny7cS5XNzUPmrZjJc9vP769qto4+2KFQM5VOKPIwJ8iSom/BMtkZ4gFMg4HFNU88PrzJYAKzhlQQIauwN02FJbdKwl6JWYSKJEj1DEiDMLCxWH52KJiNQMDXfxZxxv9Eol4N9OQiFQ+WjYXlZ1n8t7fIVLvvC2WEJrSWEXMMl/fEauxZWlPf9MYzBzVspSSwg7MWO3jtQsIoMm4mUP0TqbMcqhlANIrXNGyRrwPPEpV2SYvzHNiHA7P5Rir+5egXTw4KYpWc+uIRSlkMiY3bgSaBXAsvhyMorTeACc+3TKGqMoSlegozzflRzlKCdt59Gx9WtBSgEzg==', 'body': '{\n  "Type" : "Notification",\n  "MessageId" : "52b07294-6c2e-5192-a4a1-2cd46afa61ce",\n  "TopicArn" : "arn:aws:sns:me-central-1:517606038493:efr-journey-status-uat",\n  "Message" : "{\\n  \\"data\\" : {\\n    \\"topicName\\": \\"efr-journey-status-uat\\",\\n    \\"convId\\": \\"6119ee087afb4dddbfa98ea2f88fceae\\",\\n    \\"customerId\\": \\"6047331\\",\\n    \\"journey\\": \\"KYC_UPLOAD\\",\\n    \\"efrStatus\\": \\"EFR_DOCUMENT_UPLOAD_COMPLETED\\",\\n    \\"requestedBy\\": \\"EFR_DOCUMENT_UPLOAD-uat\\"\\n},\\n  \\"headers\\": {\\n        \\"Accept\\": \\"*\\\\/*\\" ,\\n        \\"Accept-Encoding\\": \\"gzip, deflate\\" ,\\n        \\"CHANNELID\\": \\"MOB\\" ,\\n        \\"Content-Type\\": \\"application\\\\/json\\" ,\\n        \\"Host\\": \\"internalretailapi-uat.bankfab.com\\" ,\\n        \\"User-Agent\\": \\"python-httpx\\\\/0.24.1\\" ,\\n        \\"x-amzn-cipher-suite\\": \\"ECDHE-RSA-AES128-GCM-SHA256\\" ,\\n        \\"x-amzn-tls-version\\": \\"TLSv1.2\\" ,\\n        \\"x-amzn-vpc-id\\": \\"vpc-05bb082fa47361dc5\\" ,\\n        \\"x-amzn-vpce-config\\": \\"1\\" ,\\n        \\"x-amzn-vpce-id\\": \\"vpce-09f935921e24d61d6\\" ,\\n        \\"x-api-key\\": \\"j60AqcESvkfSDad5NMyy80Xl6fSq0HR6Fvlowjw6\\" ,\\n        \\"x-apigw-api-id\\": \\"5n9ib4nxlk\\" ,\\n        \\"X-Forwarded-For\\": \\"10.74.8.71, 172.28.184.78\\" ,\\n        \\"XREF\\": \\"9a583974260e4ca1910bf3bad2e57b0223462908\\" \\n      }\\n}",\n  "Timestamp" : "2024-02-09T10:55:16.626Z",\n  "SignatureVersion" : "1",\n  "Signature" : "Hxp4yjSVT6QwkGO3rUNLK+mbOxapOSRzUcKijcDlZUI+SEqiamxzg1ApJAbarYFcU47CTVIp62ielp6oTKg/4/pEGlgUnYcImPAEFiFSM9LB+cBaQCSty+pSFEB3zu+ikgRGlan0yob4eMouDKydsgi+iepmZK7DBphmaLjvM9m1kRuvGhpgyuYP0jFHnwyPdPYB6JIEE+XWw+dJJCm7I02Dmv2lhPZwAfNk4XyyAtkCLfuBpU+oeisNfXkSJNoTJGu8Pl0wvszP1oH51pmfyJbaxrbXPBII3J0bFtYwLIS/HBLBWbXR0JIAZQ8cSkkArIL4faDcXCxqWTmy8CLJwQ==",\n  "SigningCertURL" : "https://sns.me-central-1.amazonaws.com/SimpleNotificationService-4feda397066d7d9e786590d8f4f17d7b.pem",\n  "UnsubscribeURL" : "https://sns.me-central-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:me-central-1:517606038493:efr-journey-status-uat:405d2cf0-60ba-448d-b0e1-1c7a96944758"\n}', 'attributes': {'ApproximateReceiveCount': '1', 'AWSTraceHeader': 'Root=1-65c60494-7cb0f7abcb364b4922a4f761', 'SentTimestamp': '1707476116759', 'SenderId': 'AIDAXDF67A73FC5KNYUHY', 'ApproximateFirstReceiveTimestamp': '1707476121759'}, 'messageAttributes': {}, 'md5OfBody': 'f073409ea8f86138d405387d0b4a7dd4', 'eventSource': 'aws:sqs', 'eventSourceARN': 'arn:aws:sqs:me-central-1:517606038493:kyc-upload-uat', 'awsRegion': 'me-central-1'}]}
+#     # stp_flag  = "N"
+#     # processed_flag = "N"
+#     # message_headers = {"LANGUAGE": "EN", "XREF":"IEE3DEA38E35C42018BD1AD8835E7", "CHANNELID":"MOB"}
+#     # message_data = { "topicName": "efr-journey-status-uat", "convId": "9a583974260e4ca1910bf3bad2e57b02", "customerId": "6047342", "journey": "KYC_UPLOAD", "efrStatus": "EFR_DOCUMENT_UPLOAD_COMPLETED", "requestedBy": "efr-document-upload_uat", "sessionId": "d28551386bc24e5885d4ed7a579c58ff", "deviceID": "3f1667a0-cec7-44e3-8bcc-35d626e45087" }
+#     # message_headers = header.update_headers(message_headers, message_data)
+#     # logger_data = logger.prepare_logger_data(message_headers, message_data)
+# #     efr_get_data_response = efr_service.get_efr_data_by_conv_id(message_data, message_headers, logger_data, ssl_context, INTERNAL_API_KEY)
+# #     # get_customer_updated_data_from_t24 = { "applicationArea": { "correlationId": "A55969627811e4ee5833fefde9ef9aa655750758524680", "countryOfOrigin": "AE", "senderId": "MOB", "transactionId": "A55969627811e4ee5833fefde9ef9aa655750758524680", "transactionDateTime": "2024-03-05T12:40:26:523Z", "language": "EN", "creationDateTime": "05/Mar/2024 12:40:26", "requiredExecutionDate": "05/Mar/2024 12:40:26" }, "responseStatus": { "status": "SUCCESS" }, "dataArea": { "fullName": "Adhithyan Jyothy Jyothy Gopinathan Nair Subhadra Amma", "prefix": "MR", "birthDate": "1994-06-28", "gender": "M", "ltGender": "F", "nationality": "IN", "emirate": "AUH", "country": "ABU DHABI, UAE", "maritalStatus": "", "isResident": "Y", "shortName": "Adhithyan Jyothy Jyothy Gopinathan", "customerIdentifier": "6045770", "customerType": "Individual", "customerOpenDate": "2024-01-04", "accountingUnitIdentifier": "AE0010001", "mothersMaidenName": "Lakshmi", "placeOfBirth": "IN", "amlSegment": "LM", "segment": "", "isStaff": False, "employment": { "employerName": "", "employerName2": "ADCOM", "monthlySalary": "30000.00", "employmentStatus": "Employed" }, "additionalCustomerInfo": { "segment": "02", "customerRateSegment": "Mass", "target": "30", "accountOfficer": "178", "language": "1", "startDate": "2024-01-04", "nameOnCard": "ADHITHYAN JYOTHY JYOT", "sector": "4000", "profession": "CLINIC MANAGER", "subSegment": "6201", "relationshipManager": "FGB2353", "vatCategory": "004", "constitution": "", "otherOfficer": [ "", "" ], "country": [ "20", "" ], "customerResidence": [ "AE", "" ], "ownerName": [ "", "" ], "ownerNationality": [ "", "" ], "percentOwner": [ "", "" ], "riskCategory": "", "riskAgreement": "", "relationCustomer": [ "", "" ], "relationCode": [ "", "" ], "reverseRelationCode": [ "", "" ], "customerEducationalBackground": "", "customerAgeClassification": "MAJOR", "powerOfAttorneyFlag": "" }, "kycInfo": { "kycFlag": "FULL", "kycDate": "2024-02-06", "kycExpiryDate": "2027-02-06", "isKYCUsingEID": False }, "identity": [ { "identityType": "EMI", "identityNumber": "784199498780198", "identityExpiryDate": "2024-10-10" }, { "identityType": "VIS", "identityNumber": "20120199366198", "identityExpiryDate": "2024-09-12" }, { "identityType": "PAS", "identityNumber": "P3965511", "identityExpiryDate": "2029-08-27" } ], "address": [ { "addressLine1": "22334455", "addressLine2": "ALFARABI STREET AL AIN", "city": "ABU DHABI, UAE", "country": "20", "postalCode": "" } ], "contacts": [ { "contactType": "PERSONAL", "mobileNumber": "0506256555", "email": "madhura.deshpande3@bankfab.com" }, { "contactType": "OFFICE" } ], "accounts": [ { "accountIdentifier": "1781006045770001", "accountTitle": "PRASANNA KUMAR VELLORE SELVAKUMAR", "postingRestriction": "", "customerIdentifier": "6045770", "currency": "AED", "isActive": True, "branchCode": "178", "powerOfAttorney": "" }, { "accountIdentifier": "1786006045770002", "accountTitle": "ADHITHYAN JYOTHY JYOTHY GOPINATHAN", "postingRestriction": "", "customerIdentifier": "6045770", "currency": "AED", "isActive": True, "branchCode": "178", "powerOfAttorney": "" } ], "FATCA": { "isPoliticalExposed": "NO"   , "isUSPersonForTaxPurpose": False, "socialSecurityNumber": "", "isTaxResidentOtherCountry": False, "isResidentOfOtherJurisdiction": "", "declarationIndicator": False, "reasonForDeclarationDisagree": "", "status": "", "isReportable": False, "otherNationalities": [ "", "" ], "nationality": [ "IN", "" ], "placeOfBirth": "Chittoor", "taxResidencies": [ { "countryJurisdictionOfTaxResident": "AE", "taxIdentificationNumber": "", "reasonIfTINNotAvailable": "A", "comments": "" }, { "countryJurisdictionOfTaxResident": "", "taxIdentificationNumber": "", "reasonIfTINNotAvailable": "", "comments": "" } ] } } }
+# #     # get_customer_data_from_t24 = customer_profile.get_customer_details_from_t24(message_data, message_headers, logger_data, ssl_context)
+#     # event = {'Records': [{'messageId': 'e3adbe49-5fa8-4541-949e-1aefddf057f7', 'receiptHandle': 'AQEBS4w73FODe0r4kJbZzM6ZNCsGd2fz1ZVPbWOq5vpJyvw9FLiZX3OQTlj0WU1hYlV4CbMKj8GtD3sriPW/DH56yuNavADYM64AsVisCvUht1n+YEqhqEFmebog/MWBTPu714Cu6f+G41sWg6VO0Upl97x0oo/IQ/QCdGH3iIa24oNSsDCgPKRJnvLuYblqVuXZ1QGpNa+qYlWXdn2/46DnS7Rt0U1g4DJNj3NMWaRIDe5TP7lpuYSJkGaRIwdAQ6ZI4st/LhH7eZ4HgQil9XIMvwvXZMuKaTt5Y1ff8zqfLOXCRzy0SgQTSwd1Wtn6QBLGnQDIy+9xoox90vE6RAuJRdwmYFHs2xXBmNRFpklvqpDcFgH0aZn28HXOqaXGbK2MAEjjNhju+lMKEeyYK33tCtPjVuzL9VUEHifbdQzqbxc=', 'body': '{\n  "data" : {\r\n    "queueName": "efr-document-upload-uat",\r\n    "convId": "9a583974260e4ca1910bf3bad2e57b02",\r\n    "customerId": "6046253",\r\n    "journey": "KYC_UPLOAD",\r\n    "efrJourneyStatus": "SUCCESS",\r\n  "sessionId": "12345678",\r\n "deviceID": "1234567",\r\n   "requestedBy": "efr-documnet-upload"\r\n},\n  "headers": {\n        "Accept": "*\\/*" ,\n        "Accept-Encoding": "gzip, deflate, br" ,\n        "CHANNELID": "MOB" ,\n        "Content-Type": "application\\/json" ,\n        "Cookie": "BIGipServervim6a8s0WbVja\\/7YOr9aUg=!oQ81yzQgR F09pkqkmW0s8UFcCcwuwgKTGvsZV 8XCDf0fzMrSlBbCzj3akFLwdTouDC9N6z2bhGD34=" ,\n        "Host": "internalretailapi-uat.bankfab.com" ,\n        "Postman-Token": "5daca6f6-5fbb-404f-a1ea-2c2bfe463d50" ,\n        "User-Agent": "PostmanRuntime\\/7.26.5" ,\n        "x-amzn-cipher-suite": "ECDHE-RSA-AES128-GCM-SHA256" ,\n        "x-amzn-tls-version": "TLSv1.2" ,\n        "x-amzn-vpc-id": "vpc-05bb082fa47361dc5" ,\n        "x-amzn-vpce-config": "1" ,\n        "x-amzn-vpce-id": "vpce-09f935921e24d61d6" ,\n        "x-api-key": "j60AqcESvkfSDad5NMyy80Xl6fSq0HR6Fvlowjw6" ,\n        "x-apigw-api-id": "5n9ib4nxlk" ,\n        "X-Forwarded-For": "10.125.21.100, 172.28.184.78" ,\n        "XREF": "234567898765432" \n      }\n}', 'attributes': {'ApproximateReceiveCount': '7', 'AWSTraceHeader': 'Root=1-65b8e280-afd5a06880a7dd392e9b1ac7', 'SentTimestamp': '1706615425132', 'SenderId': 'AROAXRA5ZLPOZ4TGJQV3G:BackplaneAssumeRoleSession', 'ApproximateFirstReceiveTimestamp': '1706615430132'}, 'messageAttributes': {}, 'md5OfBody': '0d5f8a9517fd72bb857692eeb8e99e04', 'eventSource': 'aws:sqs', 'eventSourceARN': 'arn:aws:sqs:me-central-1:517606038493:efr-document-upload-uat', 'awsRegion': 'me-central-1'}]}
+#     res = handler(event, None)
+# #     # res = bpms_service.posting_kyc_update(stp_flag, processed_flag, efr_get_data_response, get_customer_data_from_t24, message_data, message_headers, logger_data, ssl_context, None)
+# #     print(efr_get_data_response)
+# #     # get_customer_updated_data_from_t24 = {"applicationArea":{"correlationId": "I63C0D7A10B384DFC99AF0E01270278584262481102911","countryOfOrigin": "AE","senderId": "MOB","transactionId": "I63C0D7A10B384DFC99AF0E01270278584262481102911","transactionDateTime": "2024-02-29T06:29:02:061Z","language": "EN","creationDateTime": "29/Feb/2024 06:29:02","requiredExecutionDate": "29/Feb/2024 06:29:02"},"responseStatus": {"status": "SUCCESS"},"dataArea": {"fullName": "PRASANNA KUMAR","prefix": "MR","birthDate": "1983-06-24","gender": "M","ltGender": "M","nationality": "IN","emirate": "AUH","country": "ABU DHABI, UAE","maritalStatus": "","isResident": "Y","shortName": "PRASANNA KUMAR VEL SELVAKUMA","customerIdentifier": "6046679","customerType": "Individual","customerOpenDate": "2024-02-26","accountingUnitIdentifier": "AE0010001","mothersMaidenName": "Sujathasiri","placeOfBirth": "IN","amlSegment": "L","segment": "","isStaff": False,"employment": {"employerName": "","employerName2": "AGA","monthlySalary": "30000.00","employmentStatus": "Employed"},"additionalCustomerInfo": {"segment": "","customerRateSegment": "Mass","target": "30","accountOfficer": "178","language": "1","startDate": "2024-02-26","nameOnCard": "","sector": "4000","profession": "Computer Engineer","subSegment": "6201","relationshipManager": "FGB2353","vatCategory": "004","constitution": "","otherOfficer": [""],"country": ["UAE"],"customerResidence": ["AE"],"ownerName": [""],"ownerNationality": [""],"percentOwner": [""],"riskCategory": "","riskAgreement": "","relationCustomer": [""],"relationCode": [""],"reverseRelationCode": [""],"customerEducationalBackground": "","customerAgeClassification": "MAJOR","powerOfAttorneyFlag": ""},"kycInfo": {"kycFlag": "FULL","kycDate": "2024-02-26","kycExpiryDate": "2029-02-26","isKYCUsingEID": False},"identity": [{"identityType": "EMI","identityNumber": "","identityExpiryDate": "2025-04-26"},{"identityType": "VIS","identityNumber": "20120199366198","identityExpiryDate": "2025-09-12"},{"identityType": "PAS","identityNumber": "TC5306","identityExpiryDate": "2029-08-26"}],"address": [{"addressLine1": "22334455","addressLine2": "ALFARABI STREET AL AIN","city": "ABU DHABI, UAE","country": "UAE","postalCode": ""}],"contacts": [{"contactType": "PERSONAL","mobileNumber": "0506256536","email": "sanjiv.kadam@bankfab.com"},{"contactType": "OFFICE"}],"accounts": [{"accountIdentifier": "1786006046679001","accountTitle": "PRASANNA KUMAR VEL SELVAKUMAR","postingRestriction": "","customerIdentifier": "6046679","currency": "AED","isActive": True,"branchCode": "178","powerOfAttorney": ""}],"FATCA": {"isPoliticalExposed": "NO","pepPosition": "None","isUSPersonForTaxPurpose": False,"socialSecurityNumber": "","isTaxResidentOtherCountry": False,"isResidentOfOtherJurisdiction": "","declarationIndicator": False,"reasonForDeclarationDisagree": "","status": "","isReportable": False,"otherNationalities": [""],"nationality": ["IN"],"placeOfBirth": "Chittoor","taxResidencies": [{"countryJurisdictionOfTaxResident": "AE","taxIdentificationNumber": "","reasonIfTINNotAvailable": "A","comments": ""}]}}}
+# #     # efr_get_data_response = {"convId": "fed6ac255f554bff8f46a704e44d8612","journey": "KYC_UPLOAD","creationTime": "29-02-2024 10:28:22.415","frontCardScan": "/Z","backCardScan": "//Z","mrz": {"line1": "ILARE1290903011784198783609609\r","line2": "8702230M2504269IND<<<<<<<<<<<7\r","line3": "SELVAKUMARCCPRASANNA<KUMARCVEL","valid": False},"details": {"docIssuingAuthority": "ARE","docNumber": "129090301","docCode": "IL","primaryIdentifier": "SELVAKUMARCCPRASANNA KUMARCVEL","secondaryIdentifiers": "SELVAKUMARCCPRASANNA KUMARCVEL","dateOfBirth": "870223","docExpiryDate": "250426","visualExpiryDate": "250426","gender": "M","nationality": "IND","nationalityIso2": "IN","registrantNumber": "784198783609609"},"cardLayoutType": "2","ttl": 1709360902,"onboardCustomerResponse": {"report": "=","identityCardDetails": {"docType": 0,"docIssuingAuthority": "ARE","docNumber": "129090301","docCode": "IL","primaryIdentifier": "SELVAKUMARCCPRASANNA KUMARCVEL","secondaryIdentifiers": "SELVAKUMARCCPRASANNA KUMARCVEL","dateOfBirth": "1987-02-23","docExpiryDate": "2025-04-26","gender": "M","nationality": "IND","registrantNumber": "784198783609609"}},"efrValidateCustomerProfileResponse": {"data": {"pdfCertificate": "z","jsonReport": {"reportIssueDate": "2024-02-29T10:28:42.9712577+04:00","reportExpiryDate": "2025-02-28T10:28:42.9712601+04:00","identityCardDetails": {"cardCode": "IL","registrantNumber": "784198783609609","cardNumber": "129090301","issueDate": "2023-04-27T00:00:00","expiryDate": "2025-04-26T00:00:00"},"passportDetails": {"passportType": 1,"passportNumber": "TC5306","passportCountryCode": "IND","issuingAuthority": "IND","issueDate": "2019-08-27T00:00:00","expiryDate": "2029-08-26T00:00:00"},"residencyDetails": {"residencyType": {"code": "2","arabicDescription": "اقامة","englishDescription": "Residence"},"residencyNumber": "201/2019/9/366198","issuePlace": "IND","issueDate": "2023-09-13T00:00:00","expiryDate": "2025-09-12T00:00:00"},"personalDetails": {"fullName": "Prasanna Kumar Vel Selvakumar","birthDate": "1987-02-23T00:00:00","nationality": {"code": "IND","arabicDescription": "جمهورية الهند","englishDescription": "INDIA"},"maritalStatus": {"code": "1","arabicDescription": "اعزب","englishDescription": "SINGLE"},"gender": {"code": "M","arabicDescription": "ذكر","englishDescription": "MALE"},"familyBookNumber": "0","placeOfBirth": "India","motherName": "Sujathasiri"},"professionalDetails": {"qualificationLevel": {"code": "6","arabicDescription": "ماجستير","englishDescription": "MASTER"},"occupation": {"code": "1118","englishDescription": "Computer Engineer"},"fieldOfstudyEnglish": {}},"addressDetails": {"addressType": "LOCAL","phoneNumber": "02-123-8888","mobilePhoneNumber": "050-123-8888","emailAddress": "22334455","buildingName": "Falcon Tower","location": {"code": "1","arabicDescription": "ABU DHABI"},"emirate": {"code": "1","arabicDescription": "ABU DHABI"},"city": {"code": "2","englishDescription": "AL AIN"},"area": {"code": "550","arabicDescription": " العين","englishDescription": "AL AIN"},"street": {"code": "24567","arabicDescription": "شارع الفارابى","englishDescription": "AL-FARABI STREET"},"country": {},"pOBox": "22334455"},"sponsorDetails": {"sponsorType": {"code": "9","arabicDescription": "كفيل حكومة / شبه حكومة","englishDescription": "Govt / semi-Govt sponsor"},"name": "ABC CARE LLC","number": "2345767","registrantNumber": "784198421865951","nationalityCode": "IND"}}}},"documentIds": {"EID_EFR_REPORT": "090364178011a34b","EID_FRONT_PAGE": "090364178011a346","EID_EFR_CERTIFICATE": "090364178011a34c","EID_BACK_PAGE": "090364178011a347"}}
+# #     # value = validate_data_for_stp_flow(efr_get_data_response=efr_get_data_response,
+# #     #                            get_customer_data_from_t24=get_customer_updated_data_from_t24,
+# #     #                            logger_data=logger_data)
+# #     # print (f"end result : {value}")
+
+
+
+import boto3
+import csv
+import httpx
+import json 
+import base64
+import ssl
+import uuid
+import logging
+import os
+import io
+from base64 import b64decode
+from datetime import datetime
+from urllib.parse import unquote
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Fectching details from env variables
+CERT_PASSWORD = os.environ['CERT_PASSWORD']
+CLIENT_CERT =  os.environ['CLIENT_CERT']
+SERVER_KEY = os.environ['SERVER_KEY']
+CA_CERT = os.environ['CA_CERT']
+
+# Defining Constant variables
+COMMA_DELIMETER = ','
+
+
+# Decrypt code should run once and variables stored outside of the function
+# handler so that these are decrypted once per container
+logger.info(os.environ['AWS_LAMBDA_FUNCTION_NAME'])
+PASSWORD = boto3.client('kms').decrypt(
+    CiphertextBlob=b64decode(CERT_PASSWORD),
+    EncryptionContext={'LambdaFunctionName': os.environ['AWS_LAMBDA_FUNCTION_NAME']}
+)['Plaintext'].decode('utf-8')
+
+
+# PASSWORD = 'p@ssw0rd'
+# CLIENT_CERT =  r'C:\Users\O27038\Python\efr-validate-customer-profile\ssl\sit\client.crt'
+# SERVER_KEY = r'C:\Users\O27038\Python\efr-validate-customer-profile\ssl\sit\client.key'
+# CA_CERT = r'C:\Users\O27038\Python\efr-validate-customer-profile\ssl\sit\certificate.pem'
+
+'''
+Creation of SSL Context for ssl certificate verification.
+'''
+sslcontext = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+sslcontext.verify_mode = ssl.CERT_REQUIRED
+sslcontext.check_hostname = True
+sslcontext.load_verify_locations(cafile=CA_CERT)
+sslcontext.load_cert_chain(CLIENT_CERT,SERVER_KEY,PASSWORD)
+
+s3_client = boto3.client('s3')
+
+# CSV column mapping with Object fields
+csv_column_mapping = {'customerId' :'CIN' , 'cif' :  'CIF', 'fullName' : 'CM Name', 'target' : 'Target Code', 'segment' : 'Business Segment', 'accountOfficer' : 'Branch', 'relationshipManager' : 'RM', 'nationality' : 'Nationality', 'login_attempts':'Total Login Attempts', 'no_of_days':'Login Period (no. of Days)'}
+
+
+# Lambda handler
+def handler(event,content):
+    logger.info(f"event received from S3 : {event}")
+    s3_bucket = event['Records'][0]['s3']['bucket']['name']
+    s3_key = event['Records'][0]['s3']['object']['key']
+    s3_key = unquote(s3_key)
+    logger.info(f"Unquote S3 key : {s3_key}")
+    response = s3_client.get_object(Bucket=s3_bucket,Key=s3_key)
+    csv_content = response['Body'].read().decode('utf-8')
+    processor(io.StringIO(csv_content), s3_key)
+
+# Method to read S3 file content and calulate login attempts and number of days
+# also this method will right S3 file content on temp location
+def read_csv(csv_data):
+    user_activity_dict = {}
+    data = []
+    reader = csv.reader(csv_data)
+    header = next(reader,None)
+    data.append(header)
+    for row in reader:
+        if row:
+            rawTime = row[2].split('.')
+            row[2]= ' '+ rawTime[0] +''
+        data.append(row)
+        user_id = row[0].strip()
+        if user_id not in user_activity_dict:
+            unique_transaction_date = set()
+            unique_transaction_date.add(row[2].strip().split(' ')[0])
+            user_activity_dict[user_id] = {'transaction_date' : unique_transaction_date, 'no_of_days' : 0, 'login_attempts' : 0}
+            transaction_type = row[5].strip()
+            if transaction_type.lower().find('login') != -1:
+                user_activity_dict[user_id]['no_of_days'] = user_activity_dict[user_id]['no_of_days'] + 1
+                user_activity_dict[user_id]['login_attempts'] = user_activity_dict[user_id]['login_attempts'] + 1
+        else:
+            transaction_date = user_activity_dict[user_id]['transaction_date']
+            transaction_type = row[5].strip()
+            if transaction_type.lower().find('login') != -1:
+                if row[2].strip().split(' ')[0] not in transaction_date:
+                    transaction_date.add(row[2].strip().split(' ')[0])
+                    user_activity_dict[user_id]['no_of_days'] = user_activity_dict[user_id]['no_of_days'] + 1
+                    user_activity_dict[user_id]['login_attempts'] = user_activity_dict[user_id]['login_attempts'] + 1
+                else:
+                    user_activity_dict[user_id]['login_attempts'] = user_activity_dict[user_id]['login_attempts'] + 1        
+    with open('/tmp/output.csv','w',newline='') as outputFile:
+        writer = csv.writer(outputFile)
+        writer.writerows(data)
+    logger.info("CSV files is copied at temp location")
+    return user_activity_dict
+
+
+# Method is used to prepare dictionary for user details.
+# key is user_name and value is complete details related to column
+def update_user_activity_dict(user_details,dict):
+    userlist = user_details.get('userList',[])
+    userlist_map = {next(iter(item.keys())):next(iter(item.values())) for item in userlist}
+    for map_values in userlist_map:
+        values = dict[map_values]
+        values["customerId"] = userlist_map[map_values]["customerId"]
+        values["cif"] = userlist_map[map_values]["cif"]
+        json_reponse = get_customer_data(userlist_map[map_values]["customerId"])
+        try:
+            values["fullName"] = json_reponse["dataArea"]["fullName"]
+            values["target"] = json_reponse["dataArea"]["additionalCustomerInfo"]["target"]
+            values["segment"] = json_reponse["dataArea"]["additionalCustomerInfo"]["segment"]
+            values["accountOfficer"] = json_reponse["dataArea"]["additionalCustomerInfo"]["accountOfficer"]
+            values["relationshipManager"] = json_reponse["dataArea"]["additionalCustomerInfo"]["relationshipManager"]
+            values["nationality"] = json_reponse["dataArea"]["nationality"]
+        except:
+            logger.info(f"Error in parsing JSON response : {json_reponse}")
+
+
+# Method is used to update CSV content and write data back to temp location        
+def write_csv(temp_file_location, user_activity_dict):
+    with open(temp_file_location,'r') as file:
+        csv_data =  list(csv.DictReader(file))
+        for row in csv_data:
+            row_key = row.get('USER_NAME')
+            values = user_activity_dict.get(row_key)
+            if values:
+                for json_key,csv_column in csv_column_mapping.items():
+                    row[csv_column] = values.get(json_key,row.get(csv_column))          
+    fieldnames = ['USER_NAME','USER_ID','TIMESTAMP','TRANSACTION_ID','IP_ADDRESS','TRANSACTION_TYPE','COUNTRY', 'CIN' , 'CIF' , 'CM Name' , 'Target Code' , 'Business Segment' , 'Branch' , 'RM' , 'Nationality' , 'Total Login Attempts' , 'Login Period (no. of Days)']
+    with open(temp_file_location,'w',newline='') as outputFile:
+        writer = csv.DictWriter(outputFile,fieldnames=fieldnames)
+        writer.writeheader()
+        logger.info(f"file open as writer {csv_data}")
+        writer.writerows(csv_data)
+
+
+# Method is used to send email
+def send_mail(csv_data_in_bytes, s3_file_name):
+    if csv_data_in_bytes is not None:
+        currectDate = datetime.now().date()
+        email_subject = "Sanctioned country report_" + currectDate.strftime("%Y-%m-%d")
+        split_array = s3_file_name.split('/')
+        s3_file_name=split_array[-1]
+        s3_file_name = s3_file_name.replace(':','_')
+        url = os.environ['SEND_EMAIL_SERVICE_URL']
+        headers = {'XREF': str(uuid.uuid4()), 'CHANNELID': 'AWS', 'content-type': 'application/json'}
+
+        # Split the TO_ADDRESS environment variable into a list of email addresses
+        to_address_list = os.environ['TO_ADDRESS'].split(COMMA_DELIMETER)
+
+        data = {
+            "sourceSystem": "FAB",
+            "requestID": str(uuid.uuid4()),
+            "fromAddress": "noreply@bankfab.com",
+            "entityName": "FAB",
+            "toAddress": to_address_list,
+            "emailSubject": email_subject,
+            "emailBodyContent": "",
+            "emailBodyContentType": "TEXT",
+            "attachment": [{
+                "attachementBytes": str(csv_data_in_bytes.decode("utf-8")),
+                "mimeType": "application/csv",
+                "fileName": s3_file_name
+            }]
+        }
+
+        data = json.dumps(data)
+        response = httpx.post(url, headers=headers, data=data, verify=sslcontext)
+        if response.status_code == 200:
+            logger.info("Email sent successfully")
+        else:
+            logger.info(f"Failed to send email. Status code: {response.status_code}")
+        logger.info(f'Email API Response: {response.text}')
+    else:
+        logger.info("csv_data_in_bytes is null.")
+    
+
+def convert_attachment_Inbytes(file_path):
+    new_csv = None
+    with open(file_path,'r') as file:
+        new_csv = base64.b64encode(file.read().encode('utf-8'))
+    return new_csv
+
+# Method is used to fetch CIN and CIF based on reference id
+def fetch_user_Details(transactionIds):
+    url= os.environ['FETCH_CIN_CIF_BY_REFID_URL']
+    headers = {'XREF': str(uuid.uuid4()), 'CHANNELID': 'IB','content-type':'application/json'}
+    data = json.dumps(transactionIds)
+    response = httpx.post(url,headers=headers, data=data, verify = False)
+    logger.info("Fetching details from DB.")
+    if response.status_code == 200:
+        logger.info("PB db response received.")
+        return response.text
+    else:
+        logger.info(f"error response : {response.status_code}")
+        return None
+
+
+# Method to fetch customer data based on CIN
+def get_customer_data(cin):
+    url= os.environ['GET_CUSTOMER_DETAILS']
+    xref = str(uuid.uuid4())
+    headers = {'XREF': xref, 'CHANNELID': 'IB','LANGUAGE':'EN'}
+    currectDate = datetime.now()
+    data = {
+    "applicationArea": {
+        "countryOfOrigin": "AE",
+        "creationDateTime": str(currectDate),
+        "requiredExecutionDate": str(currectDate),
+        "senderId": "IB",
+        "transactionDateTime": str(currectDate),
+        "transactionId": xref,
+        "language": "EN"
+    },
+    "dataArea": {
+        "customerIdentifier": cin,
+        "accountingUnitIdentifier": "AE0010001"
+    }
+    }
+    data = json.dumps(data)
+    response = httpx.post(url,headers=headers, data=data, verify = sslcontext)
+    json_reponse = response.json()
+    if response.status_code == 200:
+        logger.info(f"Customer detail response received for CIN : {cin}")
+        return json_reponse
+    else:
+        logger.info(f"Customer detail Error response received for CIN : {cin}")
+        return None
+
+def processor(csv_data, s3_file_name):
+    user_activity_dict = read_csv(csv_data)
+    temp_file_location = "/tmp/output.csv"
+    userIdsList = list(user_activity_dict.keys())
+    json_reponse = fetch_user_Details(userIdsList)
+    if json_reponse is not None:
+        update_user_activity_dict(json.loads(json_reponse),user_activity_dict)
+        write_csv(temp_file_location, user_activity_dict)
+        file_Inbytes = convert_attachment_Inbytes(temp_file_location)
+        send_mail(file_Inbytes, s3_file_name)
+    else:
+        logger.info(f'Json response is null.')
+
+if __name__ == '__main__':
+    input = r"C:\Users\O25420\Docs\python\test1r.csv"
+    processor(input)
+
+
+
 title accesscontrol/cred/v3/verify Flow
 
 User ->> System: Verify Login Request (v3)
