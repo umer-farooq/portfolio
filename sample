@@ -1,4 +1,374 @@
-   When the customer tries to update /forget the pin in the login page.
+title accesscontrol/cred/v3/verify Flow
+
+User ->> System: Verify Login Request (v3)
+System ->> SessionContext: Get Session Details (cif, deviceID, convID)
+SessionContext -->> System: Session Details
+System ->> ChannelInfoRepository: Fetch Channel Info (cif, channelType)
+ChannelInfoRepository -->> System: Channel Info
+System ->> ChannelValidator: Validate Channel Info
+ChannelValidator -->> System: Validation Success
+
+alt Browser Login
+    System ->> UserChannelRepository: Get User Channel (cif, channelType)
+    UserChannelRepository -->> System: User Channel
+    System ->> PwdHelper: Match Password
+    PwdHelper -->> System: Password Matched
+    System ->> mqNotifier: Refresh Customer Position Cache
+end
+
+alt Mobile Login
+    System ->> UserChannelRepository: Get User Channel by User ID and Device ID
+    UserChannelRepository -->> System: User Channel
+    System ->> PwdHelper: Match Password
+    PwdHelper -->> System: Password Matched
+
+    alt Status is ACTIVE_PENDING_LOGIN
+        System ->> UserChannel: Update Status to ACTIVE
+        System ->> UserChannelRepository: Save Updated User Channel
+    end
+end
+
+System ->> RiskSF: Evaluate Risk for Login
+RiskSF -->> System: Risk Evaluation Response
+
+alt Risk Allowed
+    System ->> SessionRepository: Update Verification Status
+    SessionRepository -->> System: Verification Success
+end
+
+System -->> User: Return Success Response
+
+
+/////////////////////////////////////
+title accesscontrol/cred/v4/verify Flow
+
+User ->> System: Verify Login Request (v4)
+System ->> SessionContext: Get Session Details (cif, deviceID, convID)
+SessionContext -->> System: Session Details
+System ->> ChannelInfoRepository: Fetch Channel Info (cif, channelType)
+ChannelInfoRepository -->> System: Channel Info
+System ->> ChannelValidator: Validate Channel Info
+ChannelValidator -->> System: Validation Success
+
+System ->> UserChannelRepository: Get User Channel by User ID and Device ID
+UserChannelRepository -->> System: User Channel
+
+System ->> CsTransactionSF: Send OTP Transaction Request
+CsTransactionSF -->> System: OTP Transaction Response
+
+alt OTP Success and Allow
+    System ->> UserChannel: Check Status
+    alt Status is ACTIVE_PENDING_LOGIN and Mobile
+        System ->> UserChannel: Update Status to ACTIVE  // Fix added in v4
+        System ->> UserChannelRepository: Save Updated User Channel  // Fix added in v4
+    end
+    System ->> SessionRepository: Update Verification Status
+    SessionRepository -->> System: Verification Success
+end
+
+alt OTP Failure
+    System ->> VerifyUserLoginSF: Update Channel and Access Info (Failure)
+    System ->> AppException: Throw Error (OTP Failed)
+end
+
+System -->> User: Return VerifyUserLoginResponse (Success/Failure)
+
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Key Differences Highlighted in the Sequence Diagrams:
+Channel-Specific Logic:
+
+v3: Differentiates clearly between BROWSER and MOBILE login. For browsers, it refreshes customer position and may bypass certain checks. For mobile, it has explicit logic to handle ACTIVE_PENDING_LOGIN to ACTIVE status updates.
+v4: No differentiation between browser and mobile channels in terms of customer position refresh or custom channel-specific logic. The primary focus is on handling OTP verification for all channels.
+Password Matching:
+
+v3: Contains explicit logic for password matching depending on the user's channel (e.g., browser or mobile).
+v4: Does not have explicit password matching logic; the method relies heavily on the OTP transaction to validate the user's login.
+Risk Evaluation:
+
+v3: Includes risk evaluation, using a separate service (RiskSF) to decide if the login should proceed or require additional verification.
+v4: Simplifies risk management by relying on the OTP transaction's outcome (CsTransactionSF). If the OTP is validated, the login proceeds; otherwise, it fails.
+Fix to Handle ACTIVE_PENDING_LOGIN Status:
+
+v3: Always checks if a mobile user's status is ACTIVE_PENDING_LOGIN and updates it to ACTIVE upon successful login.
+v4: Originally missed this status update logic, but the fix introduces a check for ACTIVE_PENDING_LOGIN and updates it to ACTIVE after a successful OTP validation for mobile users.
+OTP-Based Transaction Handling:
+
+v3: Does not emphasize OTP transactions as much as v4, relying more on password validation and risk evaluation.
+v4: Relies heavily on the OTP transaction's result (CsTransactionSF), making OTP validation the central part of the login process.
+Summary:
+The diagrams highlight the different approaches between v3 and v4 in handling login verification. v3 has more custom logic for channel-specific scenarios and password handling, while v4 is more streamlined, focusing primarily on OTP validation. The fix in v4 ensures that the status update from ACTIVE_PENDING_LOGIN to ACTIVE is properly handled, similar to how it was done in v3.
+
+-----------------------------------------------
+title Verify Login Flow (accesscontrol/cred/v3/verify)
+
+User ->> System: Verify Login Request
+System ->> SessionContext: Get session details (cif, deviceID, convID)
+SessionContext -->> System: Session details
+System ->> ChannelInfoRepository: Fetch Channel Info (cif, channelType)
+ChannelInfoRepository -->> System: Channel Info
+System ->> ChannelValidator: Validate Channel Info
+ChannelValidator -->> System: Validation Success
+
+alt Browser Login
+    System ->> UserChannelRepository: Get User Channel (cif, channelType)
+    UserChannelRepository -->> System: User Channel
+    System ->> PwdHelper: Match Password
+    PwdHelper -->> System: Password Match Status
+end
+
+alt Mobile Login
+    System ->> UserChannelRepository: Get User Channel by User ID and Device ID
+    UserChannelRepository -->> System: User Channel
+    System ->> PwdHelper: Match Password
+    PwdHelper -->> System: Password Match Status
+end
+
+alt Password Matched
+    System ->> UserChannel: Check if Status is ACTIVE_PENDING_LOGIN
+    UserChannel -->> System: Status ACTIVE_PENDING_LOGIN
+    System ->> UserChannel: Update Status to ACTIVE
+    System ->> UserChannelRepository: Update User Channel
+    UserChannelRepository -->> System: Update Success
+end
+
+System ->> SessionRepository: Update Verification Status
+SessionRepository -->> System: Update Success
+System -->> User: Return Success Response
+
+
+Explanation of the Diagram:
+1.	User Interaction: The user initiates the process by sending a login verification request to the system.
+2.	Fetching Details: The system retrieves necessary session and channel information, then validates it.
+3.	Password Matching: Depending on whether the user is logging in via a browser or mobile device, the system checks the stored password against the one provided.
+4.	Handling Mobile Login: If the user is logging in via a mobile device and their status is ACTIVE_PENDING_LOGIN, the system updates their status to ACTIVE.
+5.	Session Update and Response: After successful verification, the system updates the session status and sends a success response back to the user.
+This should give you a clearer picture of how the verify method processes login verification requests!
+
+
+title Verify Login Flow (accesscontrol/cred/v4/verify)
+
+User ->> System: Verify Login Request
+System ->> SessionContext: Get session details (cif, deviceID, convID)
+SessionContext -->> System: Session details
+System ->> ChannelInfoRepository: Fetch Channel Info (cif, channelType)
+ChannelInfoRepository -->> System: Channel Info
+
+alt Channel Info Missing
+    System ->> AppException: Throw Error (Invalid Condition)
+end
+
+System ->> ChannelValidator: Validate Channel Info
+ChannelValidator -->> System: Validation Success
+System ->> ChannelValidator: Verify Device ID Match
+ChannelValidator -->> System: Device Match Success
+
+System ->> UserChannelRepository: Fetch User Channel by CIF and Device ID
+UserChannelRepository -->> System: User Channel
+
+System ->> CsTransactionSF: Send OTP Transaction Request
+CsTransactionSF -->> System: OTP Transaction Response
+
+alt Transaction Success and Allow
+    System ->> VerifyUserLoginResponse: Enrich Success Response
+    System ->> SessionRepository: Update Session Status
+    SessionRepository -->> System: Update Success
+end
+
+alt Transaction Failure
+    System ->> VerifyUserLoginSF: Update Channel and Access Info (Failure)
+    System ->> AppException: Throw Error (Transaction Failed)
+end
+
+System -->> User: Return VerifyUserLoginResponse (Success/Failure)
+
+1.	User Interaction: The user starts the process by sending a login verification request.
+2.	Fetching Details: The system fetches session details (CIF, device ID, conversation ID) and validates the user’s channel and device.
+3.	Handling Missing Data: If the channel info is missing, an error is thrown, and the process stops.
+4.	Processing OTP Transaction: The system processes the OTP transaction and checks if it’s successful.
+5.	Success Flow: If the transaction is allowed, the system enriches the response and updates the session status.
+6.	Failure Flow: If the transaction fails, the system updates the channel with failure status and throws an error.
+7.	Returning the Response: Finally, the system returns the result of the login process, indicating success or failure.
+This step-by-step breakdown and flow diagram should give you a clearer understanding of how the verify method processes the login request in version 4.
+
+Let's explain the fix for accesscontrol/cred/v4/verify step by step and draw the corresponding sequence diagram, highlighting the fix.
+Step-by-Step Explanation of the Fix
+Problem Recap:
+•	In accesscontrol/cred/v3/verify, the system changes the user’s channel status from ACTIVE_PENDING_LOGIN to ACTIVE after a successful login for mobile users.
+•	However, in accesscontrol/cred/v4/verify, this status change logic is missing. So, users in the ACTIVE_PENDING_LOGIN state don’t get their status updated to ACTIVE after logging in, causing issues like not being able to delink devices.
+Fix Description:
+To fix this, we need to introduce the missing logic from v3 to v4. This will ensure that after a successful login, the user’s channel status is updated from ACTIVE_PENDING_LOGIN to ACTIVE.
+Step-by-Step Flow of the Fix:
+1.	Check for Success:
+o	After verifying the OTP transaction (transactionWithOtp.getResult().isSuccess()), we check if the decision from the OTP service is ALLOW. This indicates a successful login.
+2.	Add the Status Update Logic:
+o	If the login is successful and the user's userChannel status is ACTIVE_PENDING_LOGIN (which indicates the user had initiated a PIN reset or similar flow), we update the user’s status to ACTIVE.
+3.	Persist the Change:
+o	After updating the status, we save the updated userChannel back into the repository so that the status change is reflected in the database.
+4.	Continue the Normal Flow:
+o	The method proceeds with enriching the login response and updating the session verification status as it normally would after a successful login.
+title Verify Login Flow with Fix (accesscontrol/cred/v4/verify)
+
+User ->> System: Verify Login Request
+System ->> SessionContext: Get session details (cif, deviceID, convID)
+SessionContext -->> System: Session details
+System ->> ChannelInfoRepository: Fetch Channel Info (cif, channelType)
+ChannelInfoRepository -->> System: Channel Info
+
+alt Channel Info Missing
+    System ->> AppException: Throw Error (Invalid Condition)
+end
+
+System ->> ChannelValidator: Validate Channel Info
+ChannelValidator -->> System: Validation Success
+System ->> ChannelValidator: Verify Device ID Match
+ChannelValidator -->> System: Device Match Success
+
+System ->> UserChannelRepository: Fetch User Channel by CIF and Device ID
+UserChannelRepository -->> System: User Channel
+
+System ->> CsTransactionSF: Send OTP Transaction Request
+CsTransactionSF -->> System: OTP Transaction Response
+
+alt Transaction Success and Allow
+    System ->> VerifyUserLoginResponse: Enrich Success Response
+    
+    alt UserChannel Status is ACTIVE_PENDING_LOGIN and Mobile
+        System ->> UserChannel: Update Status to ACTIVE  // <-- Fix
+        System ->> UserChannelRepository: Save Updated UserChannel  // <-- Fix
+        UserChannelRepository -->> System: Update Success  // <-- Fix
+    end
+
+    System ->> SessionRepository: Update Session Status
+    SessionRepository -->> System: Update Success
+end
+
+alt Transaction Failure
+    System ->> VerifyUserLoginSF: Update Channel and Access Info (Failure)
+    System ->> AppException: Throw Error (Transaction Failed)
+end
+
+System -->> User: Return VerifyUserLoginResponse (Success/Failure)
+
+Explanation of the Diagram:
+1.	Normal Flow:
+o	The flow begins with the user sending a login verification request. The system fetches the session details, channel information, and user channel data, followed by validating the device and channel information.
+2.	Processing OTP Transaction:
+o	The system processes the OTP transaction and checks if the result is successful.
+3.	Fix Applied:
+o	After a successful OTP transaction, the system checks if the user’s status is ACTIVE_PENDING_LOGIN and if the user is logging in from a mobile device.
+o	If both conditions are met, the system updates the user’s channel status to ACTIVE and saves this change to the database.
+4.	Final Steps:
+o	The system proceeds with enriching the login response, updating the session verification status, and returning a success response to the user.
+Conclusion:
+The fix ensures that when a mobile user logs in successfully, their channel status is updated from ACTIVE_PENDING_LOGIN to ACTIVE. This prevents issues such as the user not being able to delink their device later. The fix follows the existing flow and only adds a check and an update when required.
+
+
+Solution 
+public VerifyUserLoginResponse verify(VerifyUserLoginRequest request) {
+    VerifyUserLoginResponse response = new VerifyUserLoginResponse();
+    return execute(request, response, req ->{
+        log.info("Verify callsign transaction is success or not.");
+        
+        SessionInfo session = SessionContext.getSession();
+        String cif = session.getUserId();
+        String deviceID = session.getDeviceID();
+        String convID = session.getConvID();
+        ChannelType channelType = session.getChannelType();
+        log.info("verify call Cif:{}, Origin:{}, ChannelType:{}, convID:{}", cif, session.getUser()==null? null: session.getUser().getUserOrigin(), channelType, convID);
+        
+        ChannelInfo channelInfo  = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+        if (Objects.isNull(channelInfo)){
+            log.error("Inconsistent data.. User data exists in USER_CHANNEL but not in CHANNEL_INFO table. for CIF:{} and channel:{}", cif, channelType);
+            throw new AppException(ErrorCodes.SYS_INVALID_CONDITION,false);
+        }
+        channelValidator.validateChannelInfo(channelInfo, channelType);
+        channelValidator.verifyCifDeviceMatch(request.getDeviceID(), cif, deviceID);
+        
+        UserChannel userChannel = userChannelRepository.fetchUserChannelByUserIDAndDeviceIDActive(cif, deviceID);
+        
+        CsTransactionResponse transactionWithOtp = csTransactionSF.transactionWithOtp(request.getCsTransactionRequest());
+        mapCSResponse(response, transactionWithOtp);
+        
+        if(transactionWithOtp.getResult().isSuccess() &&
+                transactionWithOtp.getEtgTransactionResponse().getDecision() == DecisionEnum.ALLOW) {
+            log.info("Transaction verification is successful with callsign.. enrich verify response...");
+            String cin = session.getUser().getCin();
+            enrichSuccessResponse(request, response, cif, cin, deviceID, convID, channelType, channelInfo, userChannel);
+            
+            // Add logic to update userChannel status from ACTIVE_PENDING_LOGIN to ACTIVE
+            if (ChannelStatus.ACTIVE_PENDING_LOGIN == userChannel.getStatus() && channelType == ChannelType.MOBILE) {
+                log.info("Bypassing RBA call for only Mobile device and ACTIVE_PENDING_LOGIN status");
+                userChannel.setStatus(ChannelStatus.ACTIVE);
+                userChannelRepository.updateUserChannel(userChannel);
+            }
+            
+        } else {
+            if(!transactionWithOtp.getResult().isSuccess()) {
+                verifyUserLoginSF.updateChannelAndAccessInfo(false, userChannel, channelInfo);
+                throw new AppException(ErrorCodes.valueOf(transactionWithOtp.getResult().getErrorInfo().getCode()));
+            }
+        }
+        return response;
+    });
+}
+
+
+
+To ensure that the fix works correctly and doesn't introduce new issues, you can perform a series of positive and negative test cases. Here's a breakdown of the use cases to validate both positive and negative testing after applying the fix to accesscontrol/cred/v4/verify.
+Positive Test Cases:
+1.	Successful Mobile Login with ACTIVE_PENDING_LOGIN Status:
+o	Scenario: A user with ACTIVE_PENDING_LOGIN status logs in from a mobile device.
+o	Expected Outcome: The user's channel status should be updated to ACTIVE, and the login should succeed. The user should be able to see their device in the managed device list and perform delinking if necessary.
+2.	Successful Mobile Login with ACTIVE Status:
+o	Scenario: A user with an ACTIVE status logs in from a mobile device.
+o	Expected Outcome: The login should succeed without any changes to the status. The user should have normal access to all functionalities.
+3.	Successful Browser Login with ACTIVE_PENDING_LOGIN Status:
+o	Scenario: A user with ACTIVE_PENDING_LOGIN status logs in from a browser.
+o	Expected Outcome: The user's channel status should not change (remain ACTIVE_PENDING_LOGIN), and the login should succeed.
+4.	Successful Browser Login with ACTIVE Status:
+o	Scenario: A user with an ACTIVE status logs in from a browser.
+o	Expected Outcome: The login should succeed without any changes to the status. The user should have normal access to all functionalities.
+5.	Successful OTP Transaction:
+o	Scenario: A user initiates a login process that requires OTP validation, and the OTP is successfully validated.
+o	Expected Outcome: The login process completes successfully, and any necessary status updates occur as per the fix.
+Negative Test Cases:
+1.	Failed Login Due to Incorrect Password:
+o	Scenario: A user with ACTIVE_PENDING_LOGIN status tries to log in from a mobile device but enters an incorrect password.
+o	Expected Outcome: The login should fail, and the user's channel status should remain ACTIVE_PENDING_LOGIN.
+2.	Failed OTP Transaction:
+o	Scenario: A user initiates a login process that requires OTP validation, but the OTP transaction fails (e.g., OTP is incorrect or expired).
+o	Expected Outcome: The login process should fail, the user’s channel status should not change, and an appropriate error message should be returned.
+3.	Login with Invalid Channel Information:
+o	Scenario: The user’s channel information in the database is corrupted or missing.
+o	Expected Outcome: The login process should throw an AppException with the appropriate error code indicating invalid channel information.
+4.	Login with Device Mismatch:
+o	Scenario: A user tries to log in from a device that does not match the stored device ID in their UserChannel.
+o	Expected Outcome: The login should fail, and the user's channel status should remain unchanged.
+5.	Login Attempt After Session Expiry:
+o	Scenario: A user tries to log in after their session has expired.
+o	Expected Outcome: The login should fail, and the system should prompt the user to re-authenticate.
+6.	Edge Case - Multiple Login Attempts in Quick Succession:
+o	Scenario: A user with ACTIVE_PENDING_LOGIN status attempts to log in from a mobile device multiple times in quick succession, possibly with some attempts failing and some succeeding.
+o	Expected Outcome: Only successful login attempts should change the status to ACTIVE. Failed attempts should not alter the status. The system should handle concurrent updates correctly without leaving the user in an inconsistent state.
+Validation Criteria:
+•	Status Update Validation: After each successful mobile login where the user initially had ACTIVE_PENDING_LOGIN status, verify that the status is updated to ACTIVE in the database.
+•	Response Validation: Ensure that the correct response is sent back to the user, indicating whether the login was successful or not.
+•	Error Handling: Ensure that errors are correctly handled and that appropriate exceptions are thrown and caught where necessary.
+•	Data Integrity: Check the integrity of the UserChannel data before and after the login process, ensuring that only the necessary changes are made.
+Post-Fix Validation Process:
+1.	Unit Testing:
+o	Write unit tests for the verify method to cover all the above scenarios. Mock dependencies like UserChannelRepository, CsTransactionSF, etc., to simulate different outcomes.
+2.	Integration Testing:
+o	Test the full integration of the fix in the real environment with actual data to ensure that the fix works end-to-end without affecting other parts of the application.
+3.	User Acceptance Testing (UAT):
+o	Conduct UAT with real users or testers to simulate real-world scenarios, especially focusing on mobile login flows with the ACTIVE_PENDING_LOGIN status.
+By performing these positive and negative test cases, you can be confident that the fix is correctly implemented and doesn't introduce new issues.
+
+
+
+
+
+When the customer tries to update /forget the pin in the login page.
 We can observer that the user_channel status gets change to ACTIVE_LOGIN_PENDING, 
 
 And when the cm tries to login ,still customer user channel status will be ACTIVE_LOGIN_PENDING and 
@@ -16,6 +386,7 @@ But in the new implementation ,
 accesscontrol/cred/v4/verify( VerifyUserLoginV2SF)
 we don’t have that logic to make user channel status ACTIVE_LOGIN_PENDING  ACTIVE .
 
+Version 3
 
    /**
 	 * Verify Login Credentials
@@ -258,8 +629,9 @@ we don’t have that logic to make user channel status ACTIVE_LOGIN_PENDING  
 	}
    
    
-   -----------------------------------------------------------------
-   
+
+Version 4
+
    /**
 	 * Verify Login Credentials
 	 * USAGE: LOGIN (LAST STEP)
@@ -308,8 +680,9 @@ we don’t have that logic to make user channel status ACTIVE_LOGIN_PENDING  
 		
 	}
 
+======================
 
-   /**
+/**
 	 * Verify Login Credentials
 	 * USAGE: LOGIN,REGISTRATION (LAST STEP)
 	 * @param request
