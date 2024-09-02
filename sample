@@ -1,4 +1,32 @@
-	/**
+I want to receive the transfer advice of ‘Within FAB’ and ‘Within UAE’ (IPP, IPI) transfers as part of my email notification (current BAU) upon successful transfer.
+
+So that I can refer or share the ‘Within UAE’ (IPP, IPI) and ‘Within FAB’ transfers advise in future.
+
+Prerequisite
+
+‘Within UAE’ (IPP, IPI) and ‘Within FAB’ transfers initiated via FAB Mobile/Online banking post successful implementation of this feature.
+
+Acceptance Criteria:
+
+Case 1 Post successful ‘Within FAB’ transfers, FAB Mobile /Online banking trigger email notification to customer with transfer advice as an attachment.
+
+Case 2 Post successful ‘Within UAE’ (IPP, IPI) transfers, FAB Mobile /Online banking trigger email notification to customer with transfer advice as an attachment.
+
+Case 3 Customer can access the transfer advice for ‘Within UAE’ (IPP, IPI) and ‘Within FAB’ via email notifications.
+
+Case 4 Transfer advice sent to customer's registered email address will be password protected file. We will use the same encryption maintained for account eStatement / stamped statement in production to open the file. (Last 4 digits of the account followed by the 4 digits representing the day and month of birthday)
+
+New E-mail content: To be finalized (pending with business)
+
+Attachment Name:
+
+i) WithinUAE_TransferAdvice [In case if transfer initiated is Within UAE]
+
+ii) WithinFAB_TransferAdvice [In case if transfer initiated is Within FAB]
+
+Attachments
+
+/**
 	 * Method for Generate the Iban letter
 	 * 
 	 * @param an instance of {@link IBANGeneratorReqeust}
