@@ -1,3 +1,800 @@
+	/**
+	 * Method for Generate the Iban letter
+	 * 
+	 * @param an instance of {@link IBANGeneratorReqeust}
+	 * @return {@link String}
+	 */
+	public IBANGeneratorResponse generateIban(final IBANGeneratorReqeust ibanGeneratorReqeust) {
+
+		log.info("LetterSF::generateIban()");
+		
+		IBANGeneratorResponse apiResponse = new IBANGeneratorResponse();
+		IBANAuditRequest ibanAuditRequest = new IBANAuditRequest();
+		String customerName = getCustomerName(ibanGeneratorReqeust.getSourceAccount());
+		SessionInfo sessionInfo = SessionContext.getSession();
+		ibanAuditRequest.setCin(sessionInfo.getUser().getCin());
+		ibanAuditRequest.setCif(sessionInfo.getUser().getCif());
+		ibanAuditRequest.setCustomerName(customerName);
+		
+		return execute(ibanGeneratorReqeust, apiResponse, request -> {
+			if (isValidIbanRequest(request)) {
+				DocumentRequest documentRequest = new DocumentRequest();
+				
+				// Validate if transaction is authenticated by callsign or not.
+				AuthData authResponse = authenticationSF.verifyAuthKey(request);
+				if(authResponse.getResult().isSuccess()) {
+					documentRequest.setContentItemExchange(contentItemExchangeBuilder(request.getSourceAccount()));
+					documentRequest.setDataFields(dataFieldMapper(request, customerName));
+					documentRequest.setFileName("IBAN_LETTER_"+ibanGeneratorReqeust.getSourceAccount().substring(ibanGeneratorReqeust.getSourceAccount().length()-4));
+					boolean sitFlag = StringUtils.equals(sessionInfo.getEnvironment(), AppConstants.SIT);
+					String result =  ibmbMSServiceInvoker.invokePost(documentRequest, sitFlag?ServiceURLs.DOCUMENT_GENERATE_SIT:ServiceURLs.DOCUMENT_GENERATE);
+					if (StringUtils.isNotBlank(result)) {
+						IBANFileAttachment attachment =JsonUtils.convertToObject(IBANFileAttachment.class, result);
+						apiResponse.setFileAttachment(attachment);
+						ibanAuditRequest.setStatus(AppConstants.SUCCESS);
+						publishIBANEvent(ibanAuditRequest);
+						recordIBANAuditDetails(ibanAuditRequest);
+						return apiResponse;
+					} else {
+						ibanAuditRequest.setStatus(AppConstants.FAILURE);
+						publishIBANEvent(ibanAuditRequest);
+						recordIBANAuditDetails(ibanAuditRequest);
+						throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR);
+					}
+				}
+				ibanAuditRequest.setStatus(AppConstants.FAILURE);
+				apiResponse.setResult(authResponse.getResult());
+				publishIBANEvent(ibanAuditRequest);
+				recordIBANAuditDetails(ibanAuditRequest);
+				return apiResponse;
+			} else {
+				log.info("IBANGeneratorReqeust is not valid");
+				ibanAuditRequest.setStatus(AppConstants.FAILURE);
+				publishIBANEvent(ibanAuditRequest);
+				recordIBANAuditDetails(ibanAuditRequest);
+				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+			}
+		});
+	}
+
+
+public APIResponse executeTransfer(final ExecuteTransferRequest transferRequest) {
+		APIResponse apiResponse = new APIResponse();
+		return execute(transferRequest, apiResponse, req -> {
+			EdirhamCardDetailAPIResponse edirhamCardDetails = null;
+			if(StringUtils.isBlank(transferRequest.getTxnRef()) || 
+					(StringUtils.isNotBlank(transferRequest.getTransferDescription())&&!transferRequest.getTransferDescription().matches(AppConstants.ALPHANUMERIC_SPACES_DOT_COLON_BRACKETS_HYPHEN_COMMA_PLUS))){
+				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+			}
+			
+			//In case of back dated transfer, we are overriding that back date to current date.
+			if((!StringUtils.isBlank(transferRequest.getTransferDate()) 
+					&& DateTimeHelper.INSTANCE.isDatelessThenCurrentDate(transferRequest.getTransferDate(), AppConstants.DATE_DDMMYYYY))){
+				transferRequest.setTransferDate(DateTimeHelper.INSTANCE.formatDate(new Date(), AppConstants.DATE_DDMMYYYY));
+			} 
+			if(transferRequest.getAutopay()!=null && !StringUtils.isBlank(transferRequest.getAutopay().getStartDate())
+					&& DateTimeHelper.INSTANCE.isDatelessThenCurrentDate(transferRequest.getAutopay().getStartDate(), AppConstants.DATE_DDMMYYYY)){
+				transferRequest.getAutopay().setStartDate(DateTimeHelper.INSTANCE.formatDate(new Date(), AppConstants.DATE_DDMMYYYY));
+			}
+			
+			if(transferRequest.getAmount() < 1){ //if(transferRequest.getAmount() <= 0){ 
+				// do not ALLOW such request
+				throw new AppException(ErrorCodes.MINIMUM_AMOUNT);
+			}else if(FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER == transferRequest.getFundTransferType()) {
+				if(Objects.nonNull(transferRequest.getBeneficiary()) && AppConstants.LOCAL_CURRENCY.equals(transferRequest.getBeneficiary().getCurrency())) {
+					throw new AppException(ErrorCodes.AED_CURRENCY_NOT_ALLOWED_INTERNAIONAL_TRANSFER);
+				}
+			}
+			List<Product> debitSources = getFundingSources(transferRequest);
+			if (Objects.nonNull(debitSources) && debitSources.stream().noneMatch(
+					product -> product.getProdRef().equals(transferRequest.getSourceProductRef()))) {
+				log.info("Fund Transfer not allowed for Debit Act: {}", transferRequest.getSourceProductRef());
+				apiResponse.setError(ErrorCodes.SYS_INVALID_REQUEST);
+				return apiResponse;
+			}
+
+
+			boolean bothAcctSame = isSourceNDestAccSame(transferRequest);
+			if (bothAcctSame) {
+				throw new AppException(ErrorCodes.SOURCE_DEST_ACCT_SAME);
+			}
+			if(transferRequest.getFundTransferType() == FundTransferTypes.EDIRHAM_TOPUP) {
+				edirhamCardDetails = new EdirhamCardDetailAPIResponse();
+				getEdirhamCardDetails(transferRequest,edirhamCardDetails);
+			}
+			checkLimit(transferRequest,edirhamCardDetails);
+			/*
+			 * if(!checkLimit(transferRequest)){
+			 * apiResponse.setError(ErrorCodes.LIMIT_EXCEEDED); return
+			 * apiResponse; }
+			 */
+			if (Objects.isNull(transferRequest.getAccountingUnitIdentifier())) {
+				String accountUnitIdentifer = ciRepository.getAccountUnitIdentifier(transferRequest.getSourceProductRef());
+				transferRequest.setAccountingUnitIdentifier(accountUnitIdentifer);
+			}
+
+			SessionInfo sessionInfo = SessionContext.getSession();
+			AuthData authResponse = verify(transferRequest);
+
+			if (authResponse.getResult().isSuccess()) {
+				ExecutePaymentResponse paymentResponse = null;
+
+				// Check payitaccount number before transaction	
+
+				if (Objects.nonNull(transferRequest) && Objects.nonNull(transferRequest.getFundTransferType())
+						&& transferRequest.getFundTransferType() == FundTransferTypes.PAYIT_WALLET_TOPUP) {
+					String accNoOrCCNo = transferRequest.getBeneficiary().getRemitInfo();
+					PayitLimitRequest payitLimitRequest = new PayitLimitRequest();
+					payitLimitRequest.setMobileNumber(accNoOrCCNo);
+					payitLimitRequest.setTransactionId(sessionInfo.getXref());
+					PayItValidationResponse payItValidationResponse = payitServiceInvoker
+							.fetchOtherCharge(payitLimitRequest);
+					log.info("Validating payit accout number before making transaction account1:{} and account2:{}"
+							, payItValidationResponse.getAccountDetails().getAccountNumber(), 
+							transferRequest.getBeneficiary().getAcctOrCardNo());
+					if (!payItValidationResponse.getAccountDetails().getAccountNumber()
+							.equals(transferRequest.getBeneficiary().getAcctOrCardNo())) {
+						log.info("Account is not correct");
+						throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+					}
+
+				}
+				if (transferRequest.getFundTransferType() == FundTransferTypes.IPO_SUBSCRIPTION) {
+					if(!customerSF.validateAccountBelongsToCif(transferRequest.getSourceProductRef())) {
+						log.info("Account Number doesn't belongs to the logged in customer");
+						throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
+					}
+					
+					List<IPODetails> ipoCompanies = ipoRepository.getIPOCompanies();
+					IPODetails ipoCompany = ipoCompanies.stream()
+							.filter(company -> company.getIpoId().equalsIgnoreCase(
+									transferRequest.getIpoSubscribeDetails().getIpoDetails().getIpoId()))
+							.findAny().orElse(null);
+					if (Objects.nonNull(ipoCompany)) {
+						transferRequest.getIpoSubscribeDetails().setIpoDetails(ipoCompany);
+					}
+					if ("AE0010007".equalsIgnoreCase(transferRequest.getAccountingUnitIdentifier()))
+						transferRequest.setReceiverProductRef(
+								transferRequest.getIpoSubscribeDetails().getIpoDetails().getIslCollectionAcc());
+					else {
+						transferRequest.setReceiverProductRef(
+								transferRequest.getIpoSubscribeDetails().getIpoDetails().getConvCollectionAcc());
+					}
+					// adding investor details again in the request
+					overideInvestorDeatils(transferRequest);
+				}
+				if (transferRequest.getFundTransferType() == FundTransferTypes.INSURANCE_PAYMENT) {
+					if(Objects.nonNull(transferRequest.getSourceProductType()) && transferRequest.getSourceProductType() == ProductTypes.ACCOUNT 
+							&& !customerSF.validateAccountBelongsToCif(transferRequest.getSourceProductRef())) {
+						log.info("Account Number doesn't belongs to the logged in customer");
+						throw new AppException(ErrorCodes.SYS_DEFAULT_ERROR);
+					}
+					InsuranceDetails details = transferRequest.getInsuranceDetails();
+
+					InsuranceDbAuditResponse dbAuditResponse = insuranceAuditSF.getInsuranceDbAudit(details.getJourneyReferenceId(), 
+							StringUtils.equals(SessionContext.getSession().getEnvironment(), AppConstants.SIT));
+					
+					double amount = Double.parseDouble(dbAuditResponse.getTotalPremium());
+					log.info("Amount from api: {}",amount);
+					log.info("Amount from request: {}",transferRequest.getAmount());
+					if(amount != transferRequest.getAmount()) {
+						throw new AppException(ErrorCodes.INSURANCE_PAYMENT_AMOUNT_MISMATCH);
+					}
+					FabSerialNoResponse response = insuranceSF.getFabSerialNo(details.getPlanType());
+					log.info("Plan type for fab serial no. {}", details.getPlanType());
+					if(response.getResult().getStatus().equals("success")) {
+						details.setFabSerialNo(response.getSno());
+					}else {
+						throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR);
+					}
+					details.setCustomerSource(T24CompanyCodes.findByCompanyCode(transferRequest.getAccountingUnitIdentifier()).getDescription());
+					transferRequest.setInsuranceDetails(details);
+					String receiverRef = settingsRepository.getAppSettingValue(details.getBrandCode()).getValue();
+					transferRequest.setReceiverProductRef(receiverRef);
+					transferRequest.setAccountingUnitIdentifier(ciRepository.getAccountUnitIdentifier(receiverRef));
+					
+				}
+				//PBG:1863 MCSEND INDIA Update bene details
+				
+				if(transferRequest.getFundTransferType() == FundTransferTypes.INSTANT_FUNDS_TRANSFER && Objects.nonNull(transferRequest.getIsReceiverNameUpdated()) &&
+						transferRequest.getIsReceiverNameUpdated() && Objects.nonNull(transferRequest.getBeneficiary())) {
+					log.debug("Inside Bene update");
+					CreateUpdateBeneficiaryRequest updateBeneficiaryRequest = createAutopay(transferRequest, false, false);
+					updateBeneficiaryRequest.setIsMcSendBeneDetailUpdate(true);
+					updateBeneficiaryRequest.setAutopayEnabled(false);
+					updateBeneficiaryRequest.setBeneId(transferRequest.getBeneficiary().getId());
+					createUpdateBeneficiaryServiceInvoker.update(updateBeneficiaryRequest);
+					log.debug("Bene update done");
+
+				}
+				
+
+				// Check if transfer date is future date then create SI with onetime frequency
+				overrideBeneficiaryObj(transferRequest, sessionInfo.getUserId());
+				
+
+				//PRM-686
+				//For old version of mobile app's prior to version 1.0.11, 
+				//beneficiary bank address wasn't mandatory due to which transaction was getting reversed for FAB remit transaction
+				//Block requests if beneficiary bank address isn't passed
+				if(transferRequest.getFundTransferType() == FundTransferTypes.BANK_TO_BANK_FUNDS_TRANSFER){
+					//Modify paymentDescription to replace with default purpose code for FAB Remit
+					transferRequest.setTransferDescription(AppConstants.DEFAULT_SWIFT_PURPOSE_CODE);
+
+					if(StringUtils.isBlank(transferRequest.getBeneficiary().getBankAddress1()) 
+							|| StringUtils.isBlank(transferRequest.getBeneficiary().getBankAddress2())){
+						throw new AppException(ErrorCodes.BENE_ADDRESS_NA);
+					}
+				}
+
+				String destinationCurrency = getTransferCurrency(transferRequest);
+
+				//Rule validation for card as funding source.
+				if(Objects.nonNull(transferRequest.getSourceProductType()) && transferRequest.getSourceProductType() == ProductTypes.CARD) {
+					final CardFundingSourceRule cardRule = staticDataRepository.getCreditCardAsFundingSourceRule(req.getFundTransferType().name());
+					if(Objects.nonNull(cardRule)) {
+						//check the rules
+						if(!isValidCardTransfer(transferRequest, destinationCurrency, cardRule)) {
+							throw new AppException(ErrorCodes.OPERATION_NOT_ALLOWED);
+						}
+					}
+				} else {
+					/*final List<AccountFundingSourceRule> accountRuleList = staticDataRepository.getAccountAsFundingSourceRule(req.getFundTransferType().name());
+					if(Objects.nonNull(accountRuleList)) {
+						AccountFundingSourceRule aedAcctRule = accountRuleList.stream().filter(rule -> rule.getTransferCurrency().equals(transferRequest.getSourceCurrency())).findFirst().get();
+						AccountFundingSourceRule fcyAcctRule = accountRuleList.stream().filter(rule -> !rule.getTransferCurrency().equals(transferRequest.getSourceCurrency())).findFirst().get();
+						log.info("aedAcctRule : {}",aedAcctRule);
+						log.info("fcyAcctRule : {}",fcyAcctRule);*/
+
+					/*if(transferRequest.getSourceCurrency().equals(aedAcctRule.getTransferCurrency())) {
+							if(!isValidAccountTransfer(transferRequest, destinationCurrency, aedAcctRule)) {
+								throw new AppException(ErrorCodes.OPERATION_NOT_ALLOWED);
+							}
+							} else if(!isValidAccountTransfer(transferRequest, destinationCurrency, fcyAcctRule)) {
+								throw new AppException(ErrorCodes.OPERATION_NOT_ALLOWED);
+							}
+						}*/
+					//}
+
+					//TODO: Account funding source rule to be applied.
+					if(transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_BANK_FUNDS_TRANSFER) {
+						final String creditAccountNo = Objects.nonNull(transferRequest.getBeneficiary())
+								? StringUtils.isNotBlank(transferRequest.getBeneficiary().getAcctOrCardNo()) ? transferRequest.getBeneficiary().getAcctOrCardNo() : transferRequest.getReceiverProductRef()
+										: transferRequest.getReceiverProductRef();
+
+								//	log.info("getReceiverProductType="+transferRequest.getReceiverProductType().name());
+
+								//	log.info("ProductTypes_CARD="+ProductTypes.CARD.name());
+
+								if(Objects.nonNull(transferRequest.getReceiverProductType()) && transferRequest.getReceiverProductType().name().equals(ProductTypes.CARD.name())) {
+									//	log.info("Inside Card check");
+									if(StringUtils.isNotBlank(creditAccountNo) && Pattern.matches(AppConstants.CARD_REGEX, creditAccountNo) 
+											&& StringUtils.isNotBlank(transferRequest.getSourceCurrency()) && !transferRequest.getSourceCurrency().equals(LOCAL_CURRENCY)) {
+										throw new AppException(ErrorCodes.NONAED_ACCT_TO_CARD); 
+									}
+								}
+								/**	if(StringUtils.isNotBlank(creditAccountNo) && Pattern.matches(AppConstants.CARD_REGEX, creditAccountNo) 
+								&& StringUtils.isNotBlank(transferRequest.getSourceCurrency()) && !transferRequest.getSourceCurrency().equals(LOCAL_CURRENCY)) {
+							throw new AppException(ErrorCodes.NONAED_ACCT_TO_CARD); 
+						}	**/
+					}
+				}
+				//7510 Defect changes
+				if(transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_BANK_FUNDS_TRANSFER) {
+					String creditAccountNo = Objects.nonNull(transferRequest.getBeneficiary())
+							? StringUtils.isNotBlank(transferRequest.getBeneficiary().getAcctOrCardNo()) ? transferRequest.getBeneficiary().getAcctOrCardNo() : transferRequest.getReceiverProductRef()
+									: transferRequest.getReceiverProductRef();
+							AccountDetails prdDtls = ciRepository.fetchBeneficiaryProductDetail(creditAccountNo);
+
+							if(Objects.nonNull(prdDtls) && StringUtils.isNotBlank(prdDtls.getCompany()) && T24CompanyCodes.ISB.name().equals(prdDtls.getCompany())) {
+								throw new AppException(ErrorCodes.BENE_ISLAMIC_FAB_ACC);
+							}
+				}
+				if(Objects.nonNull(transferRequest.getSourceProductType()) && transferRequest.getSourceProductType() == ProductTypes.ACCOUNT
+						&& transferRequest.getFundTransferType() != FundTransferTypes.OWN_ACCT_FUNDS_TRANSFER) {
+					AccountDetails prdDtls = ciRepository.fetchBeneficiaryProductDetail(transferRequest.getSourceProductRef());
+					if(Objects.nonNull(prdDtls) && StringUtils.isNotBlank(prdDtls.getCompany()) && T24CompanyCodes.ISB.name().equals(prdDtls.getCompany())) {
+						throw new AppException(ErrorCodes.BENE_ISLAMIC_FAB_ACC);
+					}
+				}
+
+				// only for own account transfer, convert the card ref to cardnumber.
+				if((transferRequest.getFundTransferType() == FundTransferTypes.OWN_ACCT_FUNDS_TRANSFER
+						|| transferRequest.getFundTransferType() == FundTransferTypes.CARD_PAYMENT_BY_ACCOUNT)
+						&& Objects.nonNull(transferRequest.getReceiverProductType()) &&
+						transferRequest.getReceiverProductType().compareTo(ProductTypes.CARD) == 0) {
+					transferRequest.setReceiverProductRef(TextUtils.INSTANCE.getCardNumber(transferRequest.getReceiverProductRef()));
+				}
+
+				if(transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_UAE_FUNDS_TRANSFER) {
+					boolean isCityofBirthPresent = Objects.nonNull(transferRequest.getCityOfBirth()) && StringUtils.isNotBlank(transferRequest.getCityOfBirth());
+					log.info("isCityofBirthPresent : {}",isCityofBirthPresent);
+					transferRequest.setIPIRequest(transferServicesHelper.isIpiTransfer(transferRequest.getAmount(), transferRequest.getBeneficiary().getAcctOrCardNo(), transferRequest.getTransferCurrency(), transferRequest.getFundTransferType()));
+					//IPP Fundr transfer
+					transferRequest.setIPPRequest(transferServicesHelper.isIppTransfer(transferRequest.getAmount(),
+							transferRequest.getBeneficiary().getAcctOrCardNo(), transferRequest.getTransferCurrency(),
+							transferRequest.getFundTransferType()) && isCityofBirthPresent);
+					log.info("IPP Rule flag in FundTransferSF : " + transferRequest.isIPPRequest());
+					//PRM 8208 added fix to default charges for IPI and IPP
+					if(transferRequest.isIPIRequest() || transferRequest.isIPPRequest()) {
+						transferRequest.setChargeOption(ChargeType.SHA.name());
+					}
+					
+					log.info("IPI Rule flag : " + transferRequest.isIPIRequest());
+					
+					//FMDB-117871
+					
+					if(transferRequest.getVersion() > 1) {
+						if(Objects.nonNull(transferRequest.getBeneficiary()) 
+								&& AMEX_BENE_SWIFTCODE.equalsIgnoreCase(transferRequest.getBeneficiary().getSwiftCode())
+								&& !AppConstants.AED.equalsIgnoreCase(transferRequest.getTransferCurrency())							
+								)
+							throw new AppException(ErrorCodes.AMEX_BENE_INVALID_CURRENCY);
+					}
+				}
+
+
+				boolean isCoolingPeriodApplicable = false;
+				if(Objects.nonNull(transferRequest.getBeneficiary()) && StringUtils.isNotBlank(transferRequest.getBeneficiary().getStatus())) {
+					if(ACTIVE.equals(transferRequest.getBeneficiary().getStatus())) {
+						// Applicable for MB and IB
+						isCoolingPeriodApplicable = false;
+					} else {
+						isCoolingPeriodApplicable = true;
+					}
+				} else {
+					// Applicable for IB when Save and Pay flow
+					int transferCoolingPeriod = settingsRepository.getTransferCoolingPeriod(transferRequest.getFundTransferType());
+					if(transferCoolingPeriod > 0) {
+						isCoolingPeriodApplicable = true;
+					}
+					log.info("Beneficiary is not Active and CoolingPeriod:{} and Create Beneficiary Flag: {}", isCoolingPeriodApplicable, transferRequest.getCreateBeneficiary());
+				}
+				boolean isFutureDatedTransfer = DateTimeHelper.INSTANCE.isFutureDate(transferRequest.getTransferDate(), DATE_DDMMYYYY);
+				log.info("Fund Transfer: transferDate:{} and isFutureDated:{}, isCoolingPeriod:{}", transferRequest.getTransferDate(), isFutureDatedTransfer, isCoolingPeriodApplicable);
+				
+				if(transferRequest.getFundTransferType() == FundTransferTypes.IPO_SUBSCRIPTION || transferRequest.getFundTransferType() == FundTransferTypes.INSURANCE_PAYMENT) {
+					isFutureDatedTransfer = false;
+					isCoolingPeriodApplicable = false;
+				}
+				if (isFutureDatedTransfer || isCoolingPeriodApplicable /* && Objects.nonNull(transferRequest.getCreateBeneficiary()) && transferRequest.getCreateBeneficiary()*/ ) {
+					//Modify paymentDescription to append purpose code
+					//TICR-142: Purpose code changes
+					if (FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER
+							.compareTo(transferRequest.getFundTransferType()) == 0
+							&& AppConstants.CURRENCY_INR.equalsIgnoreCase(destinationCurrency)) {
+						String purposeCode = getPurposeCodeForSwiftInr(transferRequest);
+						String txnPurposeCode = "/" + purposeCode + "/";
+						transferRequest
+						.setTransferDescription(txnPurposeCode + transferRequest.getTransferDescription());
+					}
+					final CreateUpdateBeneficiaryRequest beneficiaryRequest = createAutopay(transferRequest, isFutureDatedTransfer, isCoolingPeriodApplicable);
+					CreateUpdateBeneficiaryResponse beneficiaryResponse;
+					try {
+						beneficiaryResponse = beneficiarySF.invokeCreateBeneficiary(beneficiaryRequest);
+					}catch(AppException e) {
+						if(ErrorCodes.SYS_TECHNICAL_ERROR.getCode().equalsIgnoreCase(e.getErrorCode().getCode()))
+							throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR_002);
+						throw e;
+					}catch(Exception e) {
+						log.error(e.getMessage());
+						throw new AppException(ErrorCodes.SYS_TECHNICAL_ERROR_002);
+					}
+					if(beneficiaryResponse.getResult().isSuccess() && !isCoolingPeriodApplicable){
+						// SUCCESS MESSAGE FOR AUTO BENEFICIARY
+						Map<String, Object> msgArgs = new HashMap<>();
+						msgArgs.put("nickName", StringUtils.trimToEmpty(beneficiaryRequest.getNickName()));
+						msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
+						msgArgs.put("txnDesc", beneficiaryRequest.getTransferType().getTransferDesc());
+						msgArgs.put("destAcc", TextUtils.INSTANCE.acctOrCardLast4Digits(beneficiaryRequest.getAccountOrCardNo()));
+						msgArgs.put("destProductType", "Account/Card No.");
+						msgArgs.put("transferCurrency", beneficiaryRequest.getTransferCurrency());
+						msgArgs.put("startDate", transferRequest.getTransferDate());
+						msgArgs.put("frequency", beneficiaryRequest.getAutopay().getFrequency());
+						msgArgs.put("transferAmount", Double.toString(beneficiaryRequest.getAutoPayAmount()));
+
+						if(FundTransferTypes.PAYIT_WALLET_TOPUP.compareTo(transferRequest.getFundTransferType()) == 0) {
+							msgArgs.put("destAcc", TextUtils.INSTANCE.acctOrCardLast4Digits(beneficiaryRequest.getRemitInfo()));
+							notificationService.processNotification(ContentID.PAYIT_SI_TRANSFER_ONETIME, sessionInfo, msgArgs);
+						}else if(FundTransferTypes.EDIRHAM_TOPUP.compareTo(transferRequest.getFundTransferType()) == 0) {
+							notificationService.processNotification(ContentID.EDIRHAM_SI_TRANSFER_ONETIME, sessionInfo, msgArgs);
+						} 
+						// **** FMDB-1143 DF Card Payment notification for onetime future dated SI setup
+						else if(FundTransferTypes.DF_CARD_PAYMENT.compareTo(transferRequest.getFundTransferType()) == 0) {
+							notificationService.processNotification(ContentID.DF_CARD_PAYMENT_SI_TRANSFER_ONETIME, sessionInfo, msgArgs);
+						} 
+						else {
+							notificationService.processNotification(ContentID.SI_TRANSFER_ONETIME, sessionInfo, msgArgs);
+						}
+						/*notificationService.processNotification(ContentID.SI_TRANSFER_ONETIME,
+								transferRequest.getFundTransferType().getTransferDesc(), sessionInfo,
+								transferRequest.getFundTransferType().getTransferDesc(), beneficiaryRequest.getNickName(),
+								beneficiaryRequest.getAccountOrCardNo(), Double.toString(beneficiaryRequest.getAutoPayAmount()),
+								DateTimeHelper.INSTANCE.formatDate(transferRequest.getTransferDate(), DATE_DDMMYYYY , DATE_DDMMMYYYYHHMM),
+								beneficiaryRequest.getTransferCurrency());*/
+					} 
+					/*else if(isCoolingPeriodApplicable) {
+						int transferCoolingPeriod = settingsRepository.getTransferCoolingPeriod(beneficiaryRequest.getTransferType());
+						if(transferCoolingPeriod > 0){
+							// SMS/Email specific to cooling period
+							Map<String, Object> msgArgs = new HashMap<>();
+							msgArgs.put("nickName", StringUtils.trimToEmpty(beneficiaryRequest.getNickName()));
+							msgArgs.put("txnDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null));
+							msgArgs.put("txnDesc",  beneficiaryRequest.getTransferType().getTransferDesc());
+							msgArgs.put("destAcc", TextUtils.INSTANCE.acctOrCardLast4Digits(beneficiaryRequest.getAccountOrCardNo()));
+							msgArgs.put("coolingPeriod", TextUtils.INSTANCE.getCoolingPeriod(transferCoolingPeriod));
+							ContentID content = ContentID.getSuccessContentId(beneficiaryRequest.getTransferType().name(), BENEF_ADD, COOLING_PERIOD_SUCCESS);
+							// TODO: BENEF_ADD notification message need to be changed to Fund transfer schedule message.
+							notificationService.processNotification(content, SessionContext.getSession(), msgArgs);
+						}
+					}*/
+					paymentResponse = new ExecutePaymentResponse();
+					if (AppConstants.ERROR.equalsIgnoreCase(beneficiaryResponse.getResult().getStatus())
+							&& ErrorCodes.SYS001_BENEFICIARY.getCode().equalsIgnoreCase(beneficiaryResponse.getResult().getErrorInfo().getCode()))
+						beneficiaryResponse.getResult().setFailure(ErrorCodes.SYS001_REQUEST);
+					paymentResponse.setResult(beneficiaryResponse.getResult());
+				} else {
+					log.info("Execute Fund Transfer:{}", transferRequest.getFundTransferType());
+					//Validate sender and receiver count
+					if(FundTransferTypes.SMS_CASH.compareTo(transferRequest.getFundTransferType()) == 0) {
+						checkSmsCashLimit(transferRequest);
+					} else if(FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER.compareTo(transferRequest.getFundTransferType()) == 0) {
+						// Server side dual validation to verify again
+						//validateAndOverrideSwiftOrRtCode(transferRequest);
+						overrideSwiftOrRtCode(transferRequest);
+						// Apply override routing code rules
+						if(StringUtils.isNotBlank(transferRequest.getBeneficiary().getRoutingCode())) {
+							String routingCode = applyOverrideRoutingRule(transferRequest.getBeneficiary().getRoutingCode(), transferRequest.getBeneficiary().getBankName());
+							transferRequest.getBeneficiary().setRoutingCode(routingCode);	
+						}
+
+						if(LOCAL_CURRENCY.equals(destinationCurrency)) {
+							transferRequest.getBeneficiary().setCorrBankBicCode(settingsRepository.getSetting(NOSTRO_ACCOUNT+ UNDERSCORE + LOCAL_CURRENCY));
+						} else {
+							List<CorrespondentBankDetails> correnpondentBankDetailList = fundTransferRepo.getCorrenpondentBankDetails(transferRequest.getBeneficiary().getCountry().getShortCode(), destinationCurrency, transferRequest.getBeneficiary().getSwiftCode());
+							if(Objects.isNull(correnpondentBankDetailList) || correnpondentBankDetailList.isEmpty()) {
+								log.error("Correspondent bank details not mapped for country:{} , and currency:{} ",transferRequest.getBeneficiary().getCountry().getShortCode() , destinationCurrency);
+								apiResponse.setError(ErrorCodes.INT_TRANSFER_BANK_NOT_MAPPED,transferRequest.getBeneficiary().getCountry().getShortCode() , destinationCurrency );
+								return apiResponse;
+							}
+							if (correnpondentBankDetailList.size() > 1) {
+								overrideCorresBankDetails(transferRequest, correnpondentBankDetailList);
+							} else {
+								transferRequest.getBeneficiary().setCorrBankBicCode(PREFIX_SWIFT + correnpondentBankDetailList.get(0).getBicCode());
+							}	
+						}
+
+						//Modify paymentDescription to append purpose code
+						//TICR-142: Purpose code changes
+						if (FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER
+								.compareTo(transferRequest.getFundTransferType()) == 0
+								&& destinationCurrency.equalsIgnoreCase(AppConstants.CURRENCY_INR)) {
+							String purposeCode = getPurposeCodeForSwiftInr(transferRequest);
+							String txnPurposeCode = "/" + purposeCode + "/";
+							transferRequest
+							.setTransferDescription(txnPurposeCode + transferRequest.getTransferDescription());
+						}
+					} else if(FundTransferTypes.WITHIN_UAE_FUNDS_TRANSFER.compareTo(transferRequest.getFundTransferType()) == 0) {
+						if(!LOCAL_CURRENCY.equalsIgnoreCase(transferRequest.getTransferCurrency())) {
+							List<CorrespondentBankDetails> correnpondentBankDetailList = fundTransferRepo.getCorrenpondentBankDetails(AppConstants.COUNTRY_AE, transferRequest.getTransferCurrency(), transferRequest.getBeneficiary().getSwiftCode());
+							if(Objects.isNull(correnpondentBankDetailList) || correnpondentBankDetailList.isEmpty()) {
+								log.error("Correspondent bank details not mapped for country:{} , and currency:{} ",AppConstants.COUNTRY_AE , transferRequest.getTransferCurrency());
+								apiResponse.setError(ErrorCodes.INT_TRANSFER_BANK_NOT_MAPPED, AppConstants.COUNTRY_AE , transferRequest.getTransferCurrency() );
+								return apiResponse;
+							}
+							if (correnpondentBankDetailList.size() > 1) {
+								overrideCorresBankDetails(transferRequest, correnpondentBankDetailList);
+							} else {
+								transferRequest.getBeneficiary().setCorrBankBicCode(PREFIX_SWIFT + correnpondentBankDetailList.get(0).getBicCode());
+							}
+						}
+
+					}
+
+					// PBG:1613 Adding charges in amount and modifyring transfer object
+					if (FundTransferTypes.EDIRHAM_TOPUP.compareTo(transferRequest.getFundTransferType()) == 0) {
+						setChargeInAmount(transferRequest, edirhamCardDetails);
+					}
+					//Reporting changes - when SAVE and PAY.
+					if (Objects.nonNull(transferRequest.getCreateBeneficiary()) && transferRequest.getCreateBeneficiary()) {
+						transferRequest.getBeneficiary().setCreatedOn(new Date());
+						transferRequest.getBeneficiary().setCreatedChannel(sessionInfo.getChannelName());
+					}
+
+					enrichReceiverProductType(transferRequest); // to identify receiver is card or account for within FAB
+
+					/*		if(transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_UAE_FUNDS_TRANSFER) {
+						transferRequest.setIPIRequest(ipiTransferHelper.isIpiTransfer(transferRequest.getAmount(), transferRequest.getBeneficiary().getAcctOrCardNo(), transferRequest.getTransferCurrency(), transferRequest.getFundTransferType()));	
+					}*/
+					paymentResponse = transferServiceInvoker.executeFundTransfer(transferRequest);
+					if (paymentResponse.getResult().isSuccess()) {
+						if(transferRequest.getFundTransferType() == FundTransferTypes.EDIRHAM_TOPUP) {
+							ValidatePPCTopupDataAreaRequest edirhamProcessPPCTopupRequest = new ValidatePPCTopupDataAreaRequest();
+							enrichPocessE11TopupRequest(edirhamProcessPPCTopupRequest,transferRequest);
+							ValidatePPCTopupResposne edirhamTopupResponse = edirhamServiceInvoker.validatePPCTopup(edirhamProcessPPCTopupRequest);
+							if(!(Objects.nonNull(edirhamTopupResponse) && Objects.nonNull(edirhamTopupResponse.getProcessPPCTopUpRes())
+									&& Objects.nonNull(edirhamTopupResponse.getProcessPPCTopUpRes().getDataAreaProcessPPCTopUpRes())
+									&& Objects.nonNull(edirhamTopupResponse.getProcessPPCTopUpRes().getDataAreaProcessPPCTopUpRes().getChangeStatus())
+									&& Objects.nonNull(edirhamTopupResponse.getProcessPPCTopUpRes().getDataAreaProcessPPCTopUpRes().getChangeStatus().getReasonCode())
+									&& (edirhamTopupResponse.getProcessPPCTopUpRes().getDataAreaProcessPPCTopUpRes().getChangeStatus().getReasonCode()==0))){
+								log.info("Process PPC Top up failed, calling transaction reversal"+paymentResponse);
+								transferServiceInvoker.executeCancelPaymentForEdirham(paymentResponse);
+								paymentResponse.setError(ErrorCodes.TRANSFER_FAILED_FOR_EDIRHAM);
+								return paymentResponse;
+							}
+							//5307 changes
+						} else if(transferRequest.getFundTransferType() == FundTransferTypes.IPO_SUBSCRIPTION) {
+							log.info("inside IPO subscription");
+							try {
+								IPOSubscriptionAudit ipoAudit = new IPOSubscriptionAudit();
+								IPOSubscriptionDataAreaRequest ipoSubsRequest = new IPOSubscriptionDataAreaRequest();
+								enrichIPOSubscriptionDataAreaRequest(ipoSubsRequest, transferRequest, paymentResponse);
+								insertIPOTransferAudit(transferRequest, paymentResponse, null, INITIATED);
+								IPOSubscriptionAPIResponse ipoSubscriptionResponse = ipoServiceInvoker
+										.ipoSubscription(ipoSubsRequest);
+
+								// check payment staus
+								if (ipoSubscriptionResponse.getResult().isSuccess()
+										&& Objects.nonNull(ipoSubscriptionResponse.getDataArea()) && Objects.nonNull(
+												ipoSubscriptionResponse.getDataArea().getApplicationNumber())) {
+									paymentResponse.setApplicationNumber(
+											ipoSubscriptionResponse.getDataArea().getApplicationNumber());
+									ipoRepository.updateIpoAudit(ipoSubscriptionResponse.getDataArea().getApplicationNumber(), AppConstants.SUCCESS_CAPS);
+
+								} else {
+									log.info("Getting error from IPO Subscription service" + paymentResponse);
+									transferServiceInvoker.executeCancelPaymentForEdirham(paymentResponse);
+									ipoRepository.updateIpoAudit(null, AppConstants.FAILED);
+									paymentResponse.setError(ErrorCodes.IPO_SUBMISSION_FAILED);
+								}
+
+							} catch (Exception e) {
+								log.info("Exception occured from IPO Subscription service");
+								transferServiceInvoker.executeCancelPaymentForEdirham(paymentResponse);
+								ipoRepository.updateIpoAudit(null, AppConstants.FAILED);
+								paymentResponse.setError(ErrorCodes.IPO_SUBMISSION_FAILED);
+							}
+						}else if(transferRequest.getFundTransferType() == FundTransferTypes.INSURANCE_PAYMENT) {
+							String narration = transferRequest.getInsuranceDetails().getFabSerialNo() + "/" + transferRequest.getInsuranceDetails().getBrandCode() + "/MB";
+							updateInsuranceDbAudit(transferRequest, paymentResponse, InsuranceAppStatus.PAYMENT_T24_SUCCESS, narration, null);
+							IssuePolicyRequest issuePolicyRequest = new IssuePolicyRequest();
+							issuePolicyRequest.setJourneyReferenceId(transferRequest.getInsuranceDetails().getJourneyReferenceId());
+							issuePolicyRequest.setTransactionStatus("SUCCESS");
+							issuePolicyRequest.setModeOfPayment(transferRequest.getSourceProductType().name());
+							issuePolicyRequest.setTransactionNarration(narration);
+							InsuranceDetailsResponse response = convertIssuePolicyResponse(insuranceSF.issuePolicy(issuePolicyRequest));
+							if("FAILURE".equalsIgnoreCase(response.getStatus()) || "error".equalsIgnoreCase(response.getStatus())) {
+								transferServiceInvoker.reverseInsurancePayment(transferRequest, paymentResponse);
+								updateInsuranceDbAudit(transferRequest, paymentResponse, InsuranceAppStatus.PAYMENT_CONFM_PARTNER_FAILED, narration, "FAILED");
+								paymentResponse.setError(ErrorCodes.SYS_DEFAULT_ERROR);
+							}else if("IN_PROGRESS".equalsIgnoreCase(response.getStatus())) {
+								updateInsuranceDbAudit(transferRequest, paymentResponse, null, narration, "IN_PROGRESS");
+								paymentResponse.setError(ErrorCodes.TRV_INS_POLICY_IN_PROGRESS);
+								notifyPaymentSuccess(transferRequest, paymentResponse, sessionInfo);
+							}
+							paymentResponse.setInsuranceDetails(response);
+						}
+					}
+				}
+				final String cin = sessionInfo.getUser().getCin();
+				if (paymentResponse.getResult().isSuccess()) {
+
+					// CALL ACCRUAL API FOR REMITTANCE
+					try
+					{
+						String enableCollinsionFlag = settingsRepository.getSetting(AppConstants.ENABLE_COLLINSION);
+						if(Objects.nonNull(enableCollinsionFlag) && "TRUE".equalsIgnoreCase(enableCollinsionFlag)) {
+							log.info(" Collinson is enabled...Calling accrual api");
+							callAccrualAPI(transferRequest, paymentResponse);
+							log.info("Accrual api call ends ");
+						}
+					}catch(Exception exception)					{
+						log.info("Error while calling accural{}",exception);
+					}
+
+					super.deleteTxnSession(transferRequest);
+					// SUCCESS MESSAGE FOR TRANSFER ONLY IF THE TRANSFER DATE IS NOT FUTURE DATED
+					if (!isFutureDatedTransfer && !isCoolingPeriodApplicable) {
+						//mqNotifier.refreshCustomerPositionCache(cin);
+						String key = AppConstants.CUSTOMER_POS_KEY + cin;
+						cacheHelper.removeCustomerPositionCache(key);
+
+						/*if(transferRequest.getFundTransferType() == FundTransferTypes.CARD_PAYMENT_BY_ACCOUNT ||
+								(Objects.nonNull(transferRequest.getSourceProductType()) && transferRequest.getSourceProductType() == ProductTypes.CARD)){
+							mqNotifier.refreshCustomerPositionCache(cin, AppConstants.CUST_POSITION_CARD);
+						} else if(Objects.nonNull(transferRequest.getSourceProductType()) && transferRequest.getSourceProductType() == ProductTypes.ACCOUNT) {
+							mqNotifier.refreshCustomerPositionCache(cin, AppConstants.CUST_POSITION_ACCOUNT);
+						}*/
+						// Override transaction currency in response after receiving the response from T24
+						if(StringUtils.isNotBlank(transferRequest.getSourceCurrency()) && Objects.nonNull(paymentResponse.getBalanceForFundingSource())) {
+							paymentResponse.getBalanceForFundingSource().setCurrency(transferRequest.getSourceCurrency());
+						}
+						if(StringUtils.isNotBlank(transferRequest.getReceiverCurrency()) && Objects.nonNull(paymentResponse.getBalanceForCreditAccount())) {
+							paymentResponse.getBalanceForCreditAccount().setCurrency(destinationCurrency);
+						}
+
+						//INSERTING IN TRANSFER DETAILS FOR AUDIT
+						/*try{
+							fundTransferRepo.insertTransferDetails(transferRequest,paymentResponse);
+						} catch (Exception e){
+							log.error("Error while inserting transfer details in audit table:{}", e);
+						}*/ //Migrated to Mongo
+						notifyPaymentSuccess(transferRequest, paymentResponse, sessionInfo);
+
+						try {
+							final TransactionAudit txnAudit = enrichTransferAudit(transferRequest, paymentResponse,
+									sessionInfo);
+							//changed as part of Mongo to Oracle migration
+							//transferPaymentAuditSF.captureRequest(TRANSFER, sessionInfo.getUserId(), txnAudit);
+							transferPaymentAuditSF.captureTxnAuditRequest(TRANSFER, sessionInfo.getUserId(), txnAudit);
+
+							if (Objects.nonNull(txnAudit) && Objects.nonNull(txnAudit.getTransferType())
+									&& (FundTransferTypes.INSTANT_FUNDS_TRANSFER
+											.compareTo(txnAudit.getTransferType()) == 0
+											|| Objects.nonNull(txnAudit) && Objects.nonNull(txnAudit.getTransferType())
+											&& FundTransferTypes.WALLET_TRANSFER
+											.compareTo(txnAudit.getTransferType()) == 0
+											|| Objects.nonNull(txnAudit) && Objects.nonNull(txnAudit.getTransferType())
+											&& FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER
+											.compareTo(txnAudit.getTransferType()) == 0
+											|| Objects.nonNull(txnAudit) && Objects.nonNull(txnAudit.getTransferType())
+											&& FundTransferTypes.BANK_TO_BANK_FUNDS_TRANSFER
+											.compareTo(txnAudit.getTransferType()) == 0)) {
+
+//								transferPaymentAuditSF.captureRequestForInstantAndWalletTransfer(
+//										INSTANT_AND_WALLET_TRANSFER, sessionInfo.getUserId(), txnAudit);
+								transferPaymentAuditSF.captureTxnAuditRequest(INSTANT_AND_WALLET_TRANSFER, sessionInfo.getUserId(), txnAudit);
+							} else if (FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER
+									.compareTo(transferRequest.getFundTransferType()) == 0
+									|| FundTransferTypes.BANK_TO_BANK_FUNDS_TRANSFER
+									.compareTo(transferRequest.getFundTransferType()) == 0) {
+								enrichB2BandInternationAudit(transferRequest, txnAudit);
+
+								log.info("FundTransferType::TransactionAudit after enrichB2BandInternationAudit : ");
+
+//								transferPaymentAuditSF.captureRequestForInstantAndWalletTransfer(
+//										INSTANT_AND_WALLET_TRANSFER, sessionInfo.getUserId(), txnAudit);
+								transferPaymentAuditSF.captureTxnAuditRequest(INSTANT_AND_WALLET_TRANSFER, sessionInfo.getUserId(), txnAudit);
+							}
+						} catch (Exception ex) {
+							log.error("Error while udpating txn session : ", ex);
+						}
+
+					}
+
+					// CREATE BENEFICIARY
+					if (Objects.nonNull(transferRequest.getCreateBeneficiary()) && transferRequest.getCreateBeneficiary()) {
+						CreateUpdateBeneficiaryResponse benefCreation  = creteBeneficiaryAndNotify(transferRequest, sessionInfo, isCoolingPeriodApplicable);
+						if(Objects.nonNull(benefCreation)) return benefCreation;
+					} else if(Objects.nonNull(transferRequest.getBeneficiary())) {
+						updateBeneficiaryDetails(transferRequest, destinationCurrency);
+					}
+
+					// CREATE AUTO BENEFICIARY
+					if (Objects.nonNull(transferRequest.getCreateAutopay()) && transferRequest.getCreateAutopay()) {
+						CreateUpdateBeneficiaryResponse recurringTransfer  = createRecurringTransferAndNotify(transferRequest, sessionInfo, isCoolingPeriodApplicable);
+						if(Objects.nonNull(recurringTransfer)) return recurringTransfer;
+					}
+				}
+				// Start of PRM-4775_IBMB_DUPLICATE_TRANSFER_ISSUE fix
+				if(AppConstants.ERROR.equalsIgnoreCase(paymentResponse.getResult().getStatus())) {
+					if(Objects.nonNull(paymentResponse.getResult().getErrorInfo()) &&"TRANSFER_FAILED".equalsIgnoreCase(paymentResponse.getResult().getErrorInfo().getCode()))
+					{
+						log.info(" inside the TRANSFER_FAILED scenario");
+						super.deleteTxnSession(transferRequest);
+						//mqNotifier.refreshCustomerPositionCache(sessionInfo.getUser().getCin());
+						String key = AppConstants.CUSTOMER_POS_KEY + cin;
+						cacheHelper.removeCustomerPositionCache(key);
+					}	
+				  }
+				//End of PRM-4775_IBMB_DUPLICATE_TRANSFER_ISSUE fix
+				
+				if(FundTransferTypes.EDIRHAM_TOPUP.compareTo(transferRequest.getFundTransferType()) == 0 && Objects.nonNull(paymentResponse) &&
+						Objects.nonNull(paymentResponse.getResult()) && Objects.nonNull(paymentResponse.getResult().getErrorInfo())&&
+						Objects.nonNull(paymentResponse.getResult().getErrorInfo().getCode()) &&
+						paymentResponse.getResult().getErrorInfo().getCode().equalsIgnoreCase(ErrorCodes.TRANSFER_FAILED.getCode())) {
+					paymentResponse.setError(ErrorCodes.TRANSFER_FAILED_FOR_EDIRHAM);
+				}
+				if(FundTransferTypes.IPO_SUBSCRIPTION.compareTo(transferRequest.getFundTransferType()) == 0 && Objects.nonNull(paymentResponse) &&
+						Objects.nonNull(paymentResponse.getResult()) && Objects.nonNull(paymentResponse.getResult().getErrorInfo())&&
+						Objects.nonNull(paymentResponse.getResult().getErrorInfo().getCode()) &&
+						paymentResponse.getResult().getErrorInfo().getCode().equalsIgnoreCase(ErrorCodes.TRANSFER_FAILED.getCode())) {
+					insertIPOTransferAudit(transferRequest, paymentResponse,
+							 null,AppConstants.FAILED);	
+					paymentResponse.setError(ErrorCodes.IPO_SUBMISSION_FAILED);
+				}
+				if(FundTransferTypes.INSURANCE_PAYMENT.compareTo(transferRequest.getFundTransferType()) == 0 && Objects.nonNull(paymentResponse) &&
+						Objects.nonNull(paymentResponse.getResult()) && Objects.nonNull(paymentResponse.getResult().getErrorInfo())&&
+						Objects.nonNull(paymentResponse.getResult().getErrorInfo().getCode()) &&
+						paymentResponse.getResult().getErrorInfo().getCode().equalsIgnoreCase(ErrorCodes.TRANSFER_FAILED.getCode())) {
+					
+					IssuePolicyRequest issuePolicyRequest = new IssuePolicyRequest();
+					issuePolicyRequest.setJourneyReferenceId(transferRequest.getInsuranceDetails().getJourneyReferenceId());
+					issuePolicyRequest.setTransactionStatus("FAILURE");
+					issuePolicyRequest.setModeOfPayment(transferRequest.getSourceProductType().name());
+					String narration = transferRequest.getInsuranceDetails().getFabSerialNo() + "/" + transferRequest.getInsuranceDetails().getBrandCode() + "/MB";
+					issuePolicyRequest.setTransactionNarration(narration);
+					updateInsuranceDbAudit(transferRequest, paymentResponse, InsuranceAppStatus.PAYMENT_T24_FAILED, narration, null);
+					if (paymentResponse != null && paymentResponse.getResult() != null
+							&& paymentResponse.getResult().getErrorInfo() != null) {
+						issuePolicyRequest.setErrorResponseMessages(paymentResponse.getResult().getErrorInfo().getDesc());
+					}
+
+					paymentResponse.setInsuranceDetails(convertIssuePolicyResponse(insuranceSF.issuePolicy(issuePolicyRequest)));
+					paymentResponse.setError(ErrorCodes.INSURANCE_PAYMENT_FAILED);
+				}
+				if(isFutureDatedTransfer) {
+					paymentResponse.setNextExecutionDate(transferRequest.getTransferDate());
+				} else if(Objects.nonNull(transferRequest.getCreateAutopay()) && transferRequest.getCreateAutopay()) {
+					Date paymentDate = new Date();
+					if(StringUtils.isNotBlank(transferRequest.getTransferDate())) {
+						paymentDate = DateTimeHelper.INSTANCE.formatDate(transferRequest.getTransferDate(), DATE_DDMMYYYY);
+					} 
+					paymentResponse.setNextExecutionDate(DateTimeHelper.INSTANCE.getNextRunOnDate(paymentDate, Frequency.getFrequency(transferRequest.getAutopay().getFrequency()), null)); 
+				}
+				return paymentResponse;
+			}
+			
+			return authResponse;
+		});
+	}
+
+
+Initial State
+
+Transfer Advice for transactions are only available for Swift / International Transfers
+
+Target State: 
+
+In addition to Swift/ Intenational payments, the advice will also be provided to  Within Bank and within UAE transfers.
+
+Solution steps:
+
+1)User submits the transaction
+
+2) Transaction is completed successfully
+
+3) PDF generation logic should be triggered, and the pdf created will be sent as an attachment in the notification email (existing notification email will be used to send the attachment and minor modification in the email content will be there). The template required will be put in content_item table.
+
+4) /document/v1/generate: This service is to be modified and used for PDF generation. For password protection, an optional field with the password value will be sent in request and logic needs to be added to read the variable. If the variable has password value, then password protection with the mentioned password need to be implemented on the generated pdf file. If not, then BAU logic (without password protection) will be used.
+
+When sending the email for sending advice post successful transactions, all the details of transaction can obtained from java beans. 
+
+ Mappings
+
+ 
+
+Field in Advice	Object	Attribute
+Amount	com.fab.pb.services.paymentNtransfers.requests.ExecuteTransferRequest	amount
+Charge Including VAT	com.fab.pb.services.paymentNtransfers.responses.FetchFTChargeResponse	com.fab.pb.models.List<Charge> chargeList  -- charge and tax amount of the first element . Add both.
+Transaction date	com.fab.pb.services.paymentNtransfers.requests.ExecuteTransferRequest	transferDate | Alt : date at which the transaction is executed
+Transaction Reference	com.fab.pb.services.paymentNtransfers.responses.ExecutePaymentResponse	transactionRefNo (FTNumber needs to be shown)
+Transfer Description 	com.fab.pb.services.paymentNtransfers.requests.ExecuteTransferRequest	transferDescription
+
+
+
+From : Sender 	com.fab.pb.models. User	User user = SessionContext.getSession().getUser()
+
+get details from this object for name . Use 'name' and 'salutation' fields
+Sender account number/card number	com.fab.pb.services.paymentNtransfers.requests.ExecuteTransferRequest	sourceProductRef
+From Bank 	
+will always default to 'First Abu Dhabi Bank'
+
+
+
+Beneficiary	
+com.fab.pb.services.paymentNtransfers.requests.ExecuteTransferRequest --> com.fab.pb.models.bo.Beneficiary
+Beneficiary Name	com.fab.pb.models.bo.Beneficiary	name
+Beneficiary IBAN/Card number	com.fab.pb.models.bo.Beneficiary	acctOrCardNo
+Beneficiary bank	com.fab.pb.models.bo.Beneficiary	bankName
+  
+
+The attachment in pdf format should be password protected (similar to stamped statements: Last 4 digits of the account followed by the 4 digits representing the day and month of birthday) before sending as it has secure client information.
+
+
+
+Additionally email content needs to be updated as mentioned in story.
+
 import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
