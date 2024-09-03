@@ -1,3 +1,412 @@
+public ETGTransactionRequest getEtgRequest(CsTransactionRequest csTransactionRequest, ContextTypeEnum contextType) {
+		ETGTransactionRequest etgRequest = new ETGTransactionRequest();
+		if (Objects.isNull(csTransactionRequest) || (StringUtils.isBlank(csTransactionRequest.getCsTransactionId())
+						|| Objects.isNull(csTransactionRequest.getCsTransactionType()))) {
+			log.debug("Invalid request for CS Transaction");
+			throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+		}
+
+		etgRequest.setTransactionId(csTransactionRequest.getCsTransactionId());
+		etgRequest.setOldTransactionId(csTransactionRequest.getCsOldTransactionId());
+		etgRequest.setTransactionType(csTransactionRequest.getCsTransactionType());
+		etgRequest.setAuthenticator(csTransactionRequest.getAuthenticator());
+		SessionInfo session = SessionContext.getSession();
+		etgRequest.setSessionId(session.getSessionID());
+		String refId = HashUtil.getPseudoCinHash(session.getUser().getCif());
+		etgRequest.setUserName(refId);
+		etgRequest
+				.setLanguage(StringUtils.isBlank(localeHelper.resolveLanguage()) ? AppConstants.LOCALE_EN.toLowerCase()
+						: localeHelper.resolveLanguage().toLowerCase());
+
+		etgRequest.addContext(getEtgAuthnticationContext(csTransactionRequest, contextType));
+		etgRequest.addContext(getEtgTransactionContext(csTransactionRequest));
+
+		log.debug("Add additional Context with user details.");
+		etgRequest.addContext(getUserContext(refId));
+		return etgRequest;
+	}
+
+	/**
+	 * 
+	 * @param session
+	 * @return context
+	 */
+	private Context getUserContext(String refId) {
+		log.info("CsTransactionHelper.getUserContext.start");
+		Context context = new Context();
+		context.setSource(ContextSourceEnum.DECISION_REQUEST);
+		context.setType(ContextTypeEnum.USER);
+
+		UserIdentity userIdentity = new UserIdentity();
+		userIdentity.setExternalUniqueId(refId);
+		userIdentity.setTimestamp(System.currentTimeMillis());
+		Map<String, String> additionalAttributes = new HashMap<>();
+		additionalAttributes.put(AppConstants.ATTRIBUTE_DEVICE_ID, SessionContext.getSession().getUniqueDeviceId());
+		userIdentity.setAdditionalAttributes(additionalAttributes);
+		context.setUser(userIdentity);
+		return context;
+	}
+
+	/**
+	 * Transaction status for additional transaction information for Mobile and
+	 * internet banking lock.
+	 * 
+	 * @return
+	 */
+	private Context getEtgTransactionContext(CsTransactionRequest csTransactionRequest) {
+		SessionInfo session = SessionContext.getSession();
+		Context context = new Context();
+		context.setType(ContextTypeEnum.TRANSACTION);
+		Transaction transaction = new Transaction();
+		Map<String, String> additionalTransactionInformation = new HashMap<>();
+		if (session.getChannelType() == ChannelType.BROWSER) {
+			if((settingsRepository.isIBDependentOnMobile() && callsignAuthHelper.isCallsignEnabledCust(session, ChannelType.BROWSER))
+					|| callsignAuthHelper.isCallsignEnabledCustWithDeviceCount(session, ChannelType.BROWSER)){
+				additionalTransactionInformation.put(AppConstants.IB_AUTH_TYPE, AppConstants.IB_AUTH_MOBILE);
+				ChannelInfo channelInfo = channelInfoRepository.fetchChannelInfoByChannelUserId(ChannelType.MOBILE.name(),
+						session.getUser().getCif());
+				boolean isChannelActive = Objects.nonNull(channelInfo) && StringUtils.isNotBlank(channelInfo.getStatus())
+						&& AppConstants.ACTIVE.equals(channelInfo.getStatus());
+				boolean isMobileLockOrBlocked = Objects.isNull(channelInfo) ? true
+						: (TextUtils.INSTANCE.getBoolean(channelInfo.getIsLocked())
+								|| TextUtils.INSTANCE.getBoolean(channelInfo.getIsBlocked()));
+				additionalTransactionInformation.put(AppConstants.MOBILE_BANKING_LOCK, !isChannelActive ? AppConstants.TRUE
+						: isMobileLockOrBlocked ? AppConstants.TRUE : AppConstants.FALSE);
+			}else{
+				additionalTransactionInformation.put(AppConstants.IB_AUTH_TYPE, AppConstants.IB_AUTH_OTP);
+				additionalTransactionInformation.put(AppConstants.MOBILE_BANKING_LOCK, AppConstants.FALSE);
+			}
+			
+			if(csTransactionRequest.getCsTransactionType() == CsTransactionType.PASSWORD_RESET) { 
+				log.info("overriding the forget password flow to OTP based on FMDB-94354");
+				additionalTransactionInformation.put(AppConstants.IB_AUTH_TYPE, AppConstants.IB_AUTH_OTP);
+			}
+			
+			additionalTransactionInformation.put(AppConstants.INTERNET_BANKING_LOCK, AppConstants.FALSE);
+		} else {
+			additionalTransactionInformation.put(AppConstants.MOBILE_BANKING_LOCK, AppConstants.FALSE);
+		}
+
+		String authMessageEn = getDynamicAuthMessage(csTransactionRequest, AppConstants.AUTH_MESSAGE_EN);
+		String authMessageAr = getDynamicAuthMessage(csTransactionRequest, AppConstants.AUTH_MESSAGE_AR);
+		additionalTransactionInformation.put(AppConstants.AUTH_MESSAGE_EN, authMessageEn);
+		additionalTransactionInformation.put(AppConstants.AUTH_MESSAGE_AR, authMessageAr);
+
+		if (Objects.nonNull(csTransactionRequest.getRiskSeverity())) {
+			additionalTransactionInformation.put(AppConstants.CS_TRANSACTION_RISK_CHECKER,
+					csTransactionRequest.getRiskSeverity().getCode());
+		}
+		// additionalTransactionInformation.put("transactionDateTime" ,
+		// FABUtils.INSTANCE.get);
+		// RBA Code with extra details in the context.
+		additionalTransactionInformation.put(AppConstants.TRANSACTION_DATE_TIME, determineTransactionDateTime());
+		if (isLoginRregistratin(csTransactionRequest)) {
+			// Call the new method and get the details and set in the map.
+			setRBAUserDetails(session, additionalTransactionInformation);
+		}
+		if (csTransactionRequest.getCsTransactionType() == CsTransactionType.MB_REGISTRATION) {
+			deviceNearMeNLiveness(csTransactionRequest, session, additionalTransactionInformation);
+			// deviceAppCenterName = "HUAWEI" / "iPhone" / "Android"
+			// additionalTransactionInformation.put("deviceAppCenterName" ,
+			// FABUtils.INSTANCE.get);
+			// additionalTransactionInformation.put(AppConstants.DEVICE_APP_CENTER_NAME,
+			// deviceTypeChecker.generateDeviceAppCenterName());
+			additionalTransactionInformation.put(AppConstants.DEVICE_APP_CENTER_NAME, typeChecker.determineDeviceAppCenterName());
+
+		}
+		transaction.setAdditionalTransactionInformation(additionalTransactionInformation);
+		context.setTransaction(transaction);
+
+		return context;
+	}
+
+	private String determineTransactionDateTime() {
+		Date date = new Date();
+		StringBuilder builder = new StringBuilder();
+		builder.append(DateTimeHelper.INSTANCE.formatDate(date, DATE_YYYMMDD));
+		builder.append("T");
+		builder.append(DateTimeHelper.INSTANCE.formatDate(date, TIME_HHMMSSSSS));
+		builder.append("Z");
+		return builder.toString();
+	}
+==============================================
+/**
+	 * Initiate ETG transaction with Callsign.
+	 * 
+	 * @param transactionID
+	 * @return cstran CsInitiateTransactionResponse
+	 */
+	public CsTransactionResponse initiateTransaction(CsTransactionRequest csTransactionRequest) {
+		CsTransactionResponse csTransactionResponse = new CsTransactionResponse();
+		return execute(csTransactionRequest, csTransactionResponse, req ->  {
+			
+			if (csTransactionRequest.getCsTransactionType() == CsTransactionType.LOGIN
+					|| csTransactionRequest.getCsTransactionType() == CsTransactionType.LOGIN_V2
+					|| csTransactionRequest.getCsTransactionType() == CsTransactionType.PIN_RESET)
+				checkTrottle();
+			
+			SessionInfo session = SessionContext.getSession();
+			User user = session.getUser();
+			String cif = user.getCif();
+			String convID = session.getConvID();
+			String deviceID = session.getDeviceID();
+			
+			ChannelType channelType = session.getChannelType();	
+			
+			ChannelInfo channelInfo = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+			channelValidator.validateChannelInfoForCs(channelInfo, channelType, csTransactionRequest);
+						
+			if(csTransactionRequest.getCsTransactionType() == CsTransactionType.IB_REGISTRATION
+					|| csTransactionRequest.getCsTransactionType() == CsTransactionType.MB_REGISTRATION) 
+			removeUserCacheDuringRegistration();
+			
+			if(csTransactionRequest.getCsTransactionType() == CsTransactionType.PIN_RESET_OTP || csTransactionRequest.getCsTransactionType() ==CsTransactionType.PIN_RESET
+					|| csTransactionRequest.getCsTransactionType().equals(CsTransactionType.PASSWORD_RESET)) {		
+				/** reset OTP authenticator **/
+				csAuthenticatorSF.cleanUserDeviceAndAuthenticators(false);
+			}
+			
+			ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION);
+			log.debug("ETG Request {}", etgRequest);
+			ETGTransactionResponse etgResponse = null;
+			/*if(session.getChannelType() == ChannelType.BROWSER) {
+				etgResponse = csTransactionHelper.mockEtgResponse(csTransactionRequest, false, false);
+			} else {*/
+				etgResponse = csTransactionServiceInvoker.initiateTransaction(etgRequest); // csTransactionHelper.mockEtgResponse(csTransactionRequest, false, false);
+				//}
+			transactionAudit.saveTransactionAuditInfo(prepareAudtiAttributes(csTransactionRequest,etgResponse , "INITIATE-TRANSACTION"));
+			log.debug("ETG response {}", etgResponse);
+			if(etgResponse.getResult() == ResultEnum.DENIED  || etgResponse.getResult() == ResultEnum.FAILED) {
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+				String message = etgResponse.getMessage();
+				log.error("CsTransactionSF - message : {}", message);
+				csTransactionResponse.setEtgTransactionResponse(etgResponse);
+				if (StringUtils.isNotBlank(message)
+						&& (message.equals(AppConstants.REG_MOBILE_CHANNEL_LOCKED)
+								|| message.equals(AppConstants.RESET_MOBILE_CHANNEL_LOCKED)
+								|| message.equals(AppConstants.LOGIN_MOBILE_CHANNEL_LOCKED))) {
+					csTransactionHelper.processErrorBasedOnMessage(message);
+				} else {
+					throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+				}
+			} else if(etgResponse.getDecision() == DecisionEnum.DENY) {
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+				throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+			} else if(etgResponse.getDecision() == DecisionEnum.ALLOW) {
+				//Update the Session to verified.
+				sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+				csTransactionResponse.setEtgTransactionResponse(etgResponse);
+			} else if(etgResponse.getDecision() == DecisionEnum.REFER) {
+				Long csTxnActiveTimeout = settingsRepository.getCsTxnActiveTimeout();
+				int csTxnActiveIncorrectAttempts = settingsRepository.getCsTxnActiveIncorrectAttempts();
+				int csTxnActiveMaxAttempts = settingsRepository.getCsTxnActiveMaxAttempts();
+				csTransactionResponse.setEtgTransactionResponse(etgResponse);
+				sendOTPRUnpAuthnticator(csTransactionResponse, session, user, csTransactionRequest, etgResponse);
+				
+				csTransactionResponse.setCsTxnActiveAllowedAttempts(csTxnActiveIncorrectAttempts);
+				csTransactionResponse.setCsTxnActiveMaxResendAttempts(csTxnActiveMaxAttempts);
+				csTransactionResponse.setCsTxnActiveTimeInSeconds(csTxnActiveTimeout);
+			}
+			mapNameNResponse(csTransactionResponse, cif, user, channelType);
+			
+			return csTransactionResponse;
+		});
+	}
+
+/////////////////////
+/**
+	 * Migrate already registered user to callsign.
+	 * 1. Create User in callsign.
+	 * 2. initiate transaction with MPIN Authenticator.
+	 * 
+	 * @param transactionID
+	 * @return cstran CsInitiateTransactionResponse
+	 */
+	public CsTransactionResponse migrateCustomer(CsTransactionRequest csTransactionRequest) {
+		CsTransactionResponse csTransactionResponse = new CsTransactionResponse();
+		return execute(csTransactionRequest, csTransactionResponse, req ->  {
+			SessionInfo session = SessionContext.getSession();
+			User user = session.getUser();
+			String cif = user.getCif();
+			ChannelType channelType = session.getChannelType();
+			
+			ChannelInfo channelInfo = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+			channelValidator.validateChannelInfoForCs(channelInfo, channelType, csTransactionRequest);
+			
+			/**
+			 * Create user in scim
+			 */
+			String refId = updateReferenceId(user, channelInfo);
+			APIResponse createUserRes = csUserManagementSF.createUser(refId);
+			
+			if(!createUserRes.getResult().isSuccess()) {
+				throw new AppException(ErrorCodes.CS_CREATE_USER_FAILED);
+			}
+			
+			ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATOR);
+			
+			ETGTransactionResponse etgResponse = csTransactionServiceInvoker.initiateTransaction(etgRequest);
+
+			transactionAudit.saveTransactionAuditInfo(prepareAudtiAttributes(csTransactionRequest,etgResponse,  "MPIN-MIGRATE"));
+			
+			if(etgResponse.getResult() == ResultEnum.DENIED  || etgResponse.getResult() == ResultEnum.FAILED) {
+				throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+			} else if(etgResponse.getDecision() == DecisionEnum.DENY) {
+				throw new AppException(ErrorCodes.CS_TRANSACTION_INITIATE_FAILED);
+			}
+			Long csTxnActiveTimeout = settingsRepository.getCsTxnActiveTimeout();
+			int csTxnActiveIncorrectAttempts = settingsRepository.getCsTxnActiveIncorrectAttempts();
+			int csTxnActiveMaxAttempts = settingsRepository.getCsTxnActiveMaxAttempts();
+			
+			csTransactionResponse.setCsTxnActiveAllowedAttempts(csTxnActiveIncorrectAttempts);
+			csTransactionResponse.setCsTxnActiveMaxResendAttempts(csTxnActiveMaxAttempts);
+			csTransactionResponse.setCsTxnActiveTimeInSeconds(csTxnActiveTimeout);
+			csTransactionResponse.setEtgTransactionResponse(etgResponse);
+			
+			mapNameNResponse(csTransactionResponse, cif, user, channelType);
+			return csTransactionResponse;
+		});
+	}
+/////////////////////////////////////
+/**
+	 * Reinitiate ETG transaction with Callsign.
+	 * Cancel and Initiate new transaction.
+	 * 
+	 * @param transactionID
+	 * @return
+	 */
+	public CsTransactionResponse reInitiateTransaction(CsTransactionRequest csTransactionRequest) {
+		log.debug("CsTransactionSF.reInitiateTransaction.Start {} ",csTransactionRequest);
+		CsTransactionResponse csTransactionResponse = new CsTransactionResponse();
+		return execute(csTransactionRequest, csTransactionResponse, req ->  {
+			
+			SessionInfo session = SessionContext.getSession();
+			String cif = session.getUser().getCif();
+			String convID = session.getConvID();
+			String deviceID = session.getDeviceID();
+			User user = session.getUser();
+			ChannelType channelType = session.getChannelType();
+			
+			ErrorCodes error = csTransactionRequest.getCsTransactionType() == CsTransactionType.TRANSACTION_RISK_CHECKER 
+					? ErrorCodes.CS_RISK_TRANSACTION_INITIATE_FAILED : ErrorCodes.CS_TRANSACTION_INITIATE_FAILED;
+			
+			ChannelInfo channelInfo = channelInfoRepository.fetchChannelInfoByChannelUserId(channelType.name(), cif);
+			channelValidator.validateChannelInfoForCs(channelInfo, channelType, csTransactionRequest);
+					
+			
+			if(csTransactionRequest.getCsTransactionType() == CsTransactionType.IB_REGISTRATION
+					|| csTransactionRequest.getCsTransactionType() == CsTransactionType.MB_REGISTRATION) 
+			removeUserCacheDuringRegistration();
+			
+			/*
+			|| ( StringUtils.isNotBlank(csTransactionRequest.getCsTransactionId())
+					&& StringUtils.isNotBlank(csTransactionRequest.getCsOldTransactionId()) 
+					&& csTransactionRequest.getCsOldTransactionId().equals(csTransactionRequest.getCsTransactionId()) )
+			*/
+			
+			if(StringUtils.isBlank(csTransactionRequest.getCsOldTransactionId()) || StringUtils.isBlank(csTransactionRequest.getCsTransactionId())) {
+				throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+			}
+			ETGTransactionResponse etgResponse = null;
+			if(csTransactionRequest.getCsTransactionType() == CsTransactionType.MB_REGISTRATION) {
+				//change to old transaction id
+				csTransactionServiceInvoker.cancelTransaction(csTransactionRequest.getCsOldTransactionId());
+				
+				csUserManagementSF.createUser(channelInfo.getReferenceId());
+				ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION);
+				log.debug("CsTransactionSF.reInitiateTransaction.ETGTransactionRequest {}",etgRequest);
+				
+				etgResponse = csTransactionServiceInvoker.initiateTransaction(etgRequest);
+			} else {
+				ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION);
+				log.debug("CsTransactionSF.reInitiateTransaction.ETGTransactionRequest {}",etgRequest);
+				
+				/*if(session.getChannelType() == ChannelType.BROWSER) {
+					etgResponse = csTransactionHelper.mockEtgResponse(csTransactionRequest, false, false); 
+				} else {*/
+					etgResponse = csTransactionServiceInvoker.reInitiateTransaction(etgRequest); //csTransactionHelper.mockEtgResponse(csTransactionRequest, false, false); 
+				//}
+			}
+			
+			transactionAudit.saveTransactionAuditInfo(prepareAudtiAttributes(csTransactionRequest,etgResponse, "RE-INITIATE-TRANSACTION"));
+			log.debug("CsTransactionSF.reInitiateTransaction.ETGTransactionResponse {}",etgResponse);
+			if(etgResponse.getResult() == ResultEnum.DENIED  || etgResponse.getResult() == ResultEnum.FAILED) {
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+				throw new AppException(error);
+			} else if(etgResponse.getDecision() == DecisionEnum.DENY) {
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+				throw new AppException(error);
+			} else if(etgResponse.getDecision() == DecisionEnum.ALLOW) {
+				//Update the Session to verified.
+				sessionRepository.updateVerificationStatus(convID, SessionState.VERIFIED);
+				csTransactionResponse.setEtgTransactionResponse(etgResponse);
+			} else if(etgResponse.getDecision() == DecisionEnum.REFER) {
+				// Wrap in resendOTP method, take verifycustomersf.verifyEmiratesIDForRegistration as reference.
+				// check the authenticator == AuthenticatorClassEnum.OTP_INTERNAL_GEN_EXTERNAL_DELIVER
+				// extract OTP and send otp
+				// update ETG with success.
+				log.debug("CsTransactionSF.reInitiateTransaction.ETGTransactionResponse :REFER {}");
+
+				csTransactionResponse.setEtgTransactionResponse(etgResponse);
+				sendOTPRUnpAuthnticator(csTransactionResponse, session, user, csTransactionRequest, etgResponse);
+
+				Long csTxnActiveTimeout = settingsRepository.getCsTxnActiveTimeout();
+				csTransactionResponse.setCsTxnActiveTimeInSeconds(csTxnActiveTimeout);
+				csTransactionResponse.getEtgTransactionResponse().clearPIIData();
+			}
+			mapNameNResponse(csTransactionResponse, cif, user, channelType);
+			return csTransactionResponse;
+		});
+	}
+
+////////////////////////////////////////////
+	/**
+	 * Update ETG transaction with Callsign.
+	 * 
+	 * @param transactionID
+	 * @return cstran CsInitiateTransactionResponse
+	 */
+	public CsTransactionResponse updateTransaction(CsTransactionRequest csTransactionRequest) {
+		CsTransactionResponse csTransactionResponse = new CsTransactionResponse();
+		return execute(csTransactionRequest, csTransactionResponse, req ->  {
+			
+			SessionInfo session = SessionContext.getSession();
+			String cif = session.getUserId();
+			String convID = session.getConvID();
+			String deviceID = session.getDeviceID();
+			User user = session.getUser();
+			ChannelType channelType = session.getChannelType();
+			
+			ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION);
+			log.debug("ETG Request {}", etgRequest);
+			ETGTransactionResponse etgResponse = null;
+			/*if(session.getChannelType() == ChannelType.BROWSER) {
+				etgResponse =  csTransactionHelper.mockEtgResponse(csTransactionRequest, false, true);
+			} else {*/
+				etgResponse =  csTransactionServiceInvoker.updateTransaction(etgRequest); //csTransactionHelper.mockEtgResponse(csTransactionRequest, false, true);
+			//}
+			transactionAudit.saveTransactionAuditInfo(prepareAudtiAttributes(csTransactionRequest,etgResponse, "UPDATE-TRANSACTION"));
+				
+			if(etgResponse.getResult() == ResultEnum.DENIED  || etgResponse.getResult() == ResultEnum.FAILED) {
+				setErrorMessage(csTransactionRequest);
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+			} else if(etgResponse.getDecision() == DecisionEnum.DENY) {
+				setErrorMessage(csTransactionRequest);
+				captureLoginFailure(csTransactionRequest, cif, deviceID, channelType);
+			} else if(etgResponse.getDecision() == DecisionEnum.REFER && Objects.nonNull(etgResponse.getRequirementId())
+					&& Objects.nonNull(etgResponse.getResultsMap().get(etgResponse.getRequirementId()))
+					&& Objects.nonNull(etgResponse.getResultsMap().get(etgResponse.getRequirementId()).getResponse())) {
+				sendOTPRUnpAuthnticator(csTransactionResponse, session, user, csTransactionRequest, etgResponse);
+			}
+			
+			csTransactionResponse.setEtgTransactionResponse(etgResponse);
+			return csTransactionResponse;
+		});
+	}
+
+===============================================
+
+-------------------------------
 Title: Detailed fetchAlertHistory Method Flow with updateLastAccessAlertCenter and Table Interaction
 
 Caller->fetchAlertHistory: Invoke fetchAlertHistory()
