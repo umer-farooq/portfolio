@@ -1,4 +1,68 @@
+Solution Approach:
+Introduce a Boolean Flag (isUpdate):
 
+Add a boolean flag isUpdate to the getEtgRequest method signature.
+This flag will indicate whether the request is for an update operation or a new transaction.
+Conditional Context Addition:
+
+Use the isUpdate flag to conditionally add the transaction context and user context to the ETGTransactionRequest. If isUpdate is true, these contexts will not be added.
+Modify Calling Methods:
+
+Update the methods (initiateTransaction, migrateCustomer, reInitiateTransaction, updateTransaction) to pass the appropriate value for the isUpdate flag when calling getEtgRequest.
+
+public ETGTransactionRequest getEtgRequest(CsTransactionRequest csTransactionRequest, ContextTypeEnum contextType, boolean isUpdate) {
+    ETGTransactionRequest etgRequest = new ETGTransactionRequest();
+
+    if (Objects.isNull(csTransactionRequest) || StringUtils.isBlank(csTransactionRequest.getCsTransactionId())
+            || Objects.isNull(csTransactionRequest.getCsTransactionType())) {
+        log.debug("Invalid request for CS Transaction");
+        throw new AppException(ErrorCodes.SYS_INVALID_REQUEST);
+    }
+
+    etgRequest.setTransactionId(csTransactionRequest.getCsTransactionId());
+    etgRequest.setOldTransactionId(csTransactionRequest.getCsOldTransactionId());
+    etgRequest.setTransactionType(csTransactionRequest.getCsTransactionType());
+    etgRequest.setAuthenticator(csTransactionRequest.getAuthenticator());
+
+    SessionInfo session = SessionContext.getSession();
+    etgRequest.setSessionId(session.getSessionID());
+    String refId = HashUtil.getPseudoCinHash(session.getUser().getCif());
+    etgRequest.setUserName(refId);
+    etgRequest.setLanguage(StringUtils.isBlank(localeHelper.resolveLanguage()) ? AppConstants.LOCALE_EN.toLowerCase()
+            : localeHelper.resolveLanguage().toLowerCase());
+
+    // Always add the authentication context
+    etgRequest.addContext(getEtgAuthnticationContext(csTransactionRequest, contextType));
+
+    // Only add transaction and user context if it's not an update
+    if (!isUpdate) {
+        etgRequest.addContext(getEtgTransactionContext(csTransactionRequest));
+        etgRequest.addContext(getUserContext(refId));
+    }
+
+    return etgRequest;
+}
+
+initiateTransaction Method:
+
+Pass false for isUpdate as it is a new transaction.
+ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION, false);
+migrateCustomer Method:
+
+Pass false for isUpdate as it involves migrating a customer and initiating a new transaction.
+ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATOR, false);
+reInitiateTransaction Method:
+
+Pass false for isUpdate since it is re-initiating a transaction.
+ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION, false);
+updateTransaction Method:
+
+Pass true for isUpdate to avoid adding transaction and user contexts.
+ETGTransactionRequest etgRequest = csTransactionHelper.getEtgRequest(csTransactionRequest, ContextTypeEnum.AUTHENTICATION, true);
+
+
+
+--------------------------------
 
 Current Issue: 
 
