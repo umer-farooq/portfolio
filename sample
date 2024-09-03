@@ -1,3 +1,38 @@
+Title: Detailed fetchAlertHistory Method Flow with updateLastAccessAlertCenter and Table Interaction
+
+Caller->fetchAlertHistory: Invoke fetchAlertHistory()
+fetchAlertHistory->SessionContext: getUser()
+SessionContext-->fetchAlertHistory: User
+alt User's Mobile Number is Available
+    fetchAlertHistory->ciRepository.getAlertHistory: Invoke getAlertHistory(mobileNo, email)
+    ciRepository.getAlertHistory->Database: Execute GET_ALERT_HISTORY query
+    Database-->ciRepository.getAlertHistory: ResultSet (rs)
+    loop Process each row in ResultSet
+        ciRepository.getAlertHistory->ciRepository.getAlertHistory: Create AlertDetail object
+    end
+    ciRepository.getAlertHistory-->fetchAlertHistory: List<AlertDetail>
+else
+    fetchAlertHistory->fetchAlertHistoryResponse: Initialize Empty Alert List
+end
+fetchAlertHistory->fetchAlertHistoryResponse: setAlertHistory(alertDtls)
+alt Alert Details Not Empty
+    fetchAlertHistory->fetchAlertHistoryResponse: Get First AlertDetail
+    fetchAlertHistory->SessionContext: getChannelType()
+    SessionContext-->fetchAlertHistory: ChannelType
+    alt ChannelType is BROWSER
+        fetchAlertHistory->userChannelRepository.updateLastAccessAlertCenter: Update Last Access Alert (cif, channelType, alertDetail.getIdMessage())
+        userChannelRepository.updateLastAccessAlertCenter->execute: Prepare Statement for USR_CHNL_IB_LASTACCESS_ALERTCENTER
+        execute->PreparedStatement: ps.setString(1, idMessage)
+        execute->PreparedStatement: ps.setString(2, cif)
+        execute->PreparedStatement: ps.setString(3, channelID)
+        execute->Database: Execute Update Query on user_channel table
+        Database-->execute: Success
+        execute-->userChannelRepository.updateLastAccessAlertCenter: Success
+    end
+end
+fetchAlertHistory->Caller: Return fetchAlertHistoryResponse
+
+
 @SuppressWarnings({ "unchecked", "rawtypes" })
 	public List<AlertDetail> getAlertHistory(String mobileNo, String email) {
 		return (List) executeQueryForList(CIQueryConstants.GET_ALERT_HISTORY, ps -> {
@@ -15,6 +50,8 @@
 			return alertDetail;
 		});
 	}
+
+
 
 String GET_ALERT_HISTORY = "SELECT to_char(datcreated) AS vdate, idnotifier, address, message, idmessage  FROM alert_esb_queue where address in (?,?) AND idalert IN ('IBMB_PROFILE_ALERT','IBMB_NOTIFICATION_ALERT') AND ROWNUM <= ? ORDER BY datcreated DESC";
 
