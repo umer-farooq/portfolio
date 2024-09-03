@@ -1,4 +1,24 @@
-         public FetchAlertHistoryResponse fetchAlertHistory() {
+@SuppressWarnings({ "unchecked", "rawtypes" })
+	public List<AlertDetail> getAlertHistory(String mobileNo, String email) {
+		return (List) executeQueryForList(CIQueryConstants.GET_ALERT_HISTORY, ps -> {
+			ps.setString(1, mobileNo);
+			ps.setString(2, email);
+			ps.setInt(3, MAX_ROW);
+		} , rs -> {
+			AlertDetail alertDetail = new AlertDetail();
+			int i = 0;
+			alertDetail.setDate(rs.getString(++i));
+			alertDetail.setAlertType(rs.getString(++i));
+			alertDetail.setAddress(rs.getString(++i));
+			alertDetail.setAlertMessage(rs.getString(++i));
+			alertDetail.setIdMessage(rs.getString(++i));
+			return alertDetail;
+		});
+	}
+
+String GET_ALERT_HISTORY = "SELECT to_char(datcreated) AS vdate, idnotifier, address, message, idmessage  FROM alert_esb_queue where address in (?,?) AND idalert IN ('IBMB_PROFILE_ALERT','IBMB_NOTIFICATION_ALERT') AND ROWNUM <= ? ORDER BY datcreated DESC";
+	
+public FetchAlertHistoryResponse fetchAlertHistory() {
 		FetchAlertHistoryResponse apiResponse = new FetchAlertHistoryResponse();
 		return execute(null, apiResponse, req -> {
 			User user = SessionContext.getSession().getUser();
