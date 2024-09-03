@@ -17,7 +17,19 @@
 	}
 
 String GET_ALERT_HISTORY = "SELECT to_char(datcreated) AS vdate, idnotifier, address, message, idmessage  FROM alert_esb_queue where address in (?,?) AND idalert IN ('IBMB_PROFILE_ALERT','IBMB_NOTIFICATION_ALERT') AND ROWNUM <= ? ORDER BY datcreated DESC";
+
+public Integer updateLastAccessAlertCenter(final String cif, final String channelID, final String idMessage) {
+		return execute(USR_CHNL_IB_LASTACCESS_ALERTCENTER, ps->{
+			int i = 1;
+			ps.setString(i, idMessage);
+			ps.setString(++i, cif);		
+			ps.setString(++i, channelID);
+		});
 	
+	}
+
+private static final String USR_CHNL_IB_LASTACCESS_ALERTCENTER = "UPDATE user_channel SET last_access_alertCenter = ? WHERE cif=? AND channel_id=?";
+
 public FetchAlertHistoryResponse fetchAlertHistory() {
 		FetchAlertHistoryResponse apiResponse = new FetchAlertHistoryResponse();
 		return execute(null, apiResponse, req -> {
