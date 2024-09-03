@@ -1,21 +1,36 @@
-Dear Middleware Team,
+         public FetchAlertHistoryResponse fetchAlertHistory() {
+		FetchAlertHistoryResponse apiResponse = new FetchAlertHistoryResponse();
+		return execute(null, apiResponse, req -> {
+			User user = SessionContext.getSession().getUser();
+			log.info("fetchAlertHistory for user:{}", user);
+			FetchAlertHistoryResponse fetchAlertHistoryResponse = new FetchAlertHistoryResponse();
+			List<AlertDetail> alertDtls = null;
+			AlertDetail alertDetail = null;
 
-I hope this message finds you well.
+			if (StringUtils.isNotBlank(user.getMobileNo())) {
+				alertDtls = ciRepository.getAlertHistory(user.getMobileNo(),
+						(user.getEmail() == null ? AppConstants.NA : user.getEmail()));
+			} else {
+				alertDtls = new ArrayList<AlertDetail>();
+			}
 
-Could you please provide the details on the current rate limit configuration for our middleware services? We need this information to ensure our application’s integration is aligned with the set limits and to avoid any potential disruptions.
-
-Looking forward to your response.
-
-Thank you!
-
-Best regards,
-Umer Farooq
-Sr. Application Consultant
-IBM
-
-I want to receive the transfer advice of ‘Within FAB’ and ‘Within UAE’ (IPP, IPI) transfers as part of my email notification (current BAU) upon successful transfer.
-
-So that I can refer or share the ‘Within UAE’ (IPP, IPI) and ‘Within FAB’ transfers advise in future.
+			fetchAlertHistoryResponse.setAlertHistory(alertDtls);
+			// PBG-199 Update lastAccess_alertCenter in user channel
+			if (Objects.nonNull(alertDtls) && !alertDtls.isEmpty()) {
+				alertDetail = alertDtls.get(0);
+				log.info("inside alert details - {}", alertDetail.getIdMessage());
+			}
+			String cif = user.getCif();
+			ChannelType channelType = SessionContext.getSession().getChannelType();
+			if (ChannelType.BROWSER == channelType && Objects.nonNull(alertDetail)) {
+				log.info("in alert history to update last alert access for cif:{} and channelType:{}", cif,
+						channelType.name());
+				userChannelRepository.updateLastAccessAlertCenter(cif, channelType.name(), alertDetail.getIdMessage());
+				log.info("Last access for alerts has been updated in user channel");
+			}
+			return fetchAlertHistoryResponse;
+		});
+	}
 
 Prerequisite
 
