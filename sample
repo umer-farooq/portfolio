@@ -1,3 +1,114 @@
+Current Issue: 
+
+The request payload for the Sim Swap External Endpoint is duplicating the transaction details: 
+
+PFBCallSignrequestcapturedonDP-{
+	"applicationArea": {
+		"senderId": ["IB","IB"],
+		"countryOfOrigin": ["AE",
+		"AE"],
+		"transactionDateTime": ["2024-06-03T03:12:02.002Z",
+		"2024-06-03T03:12:03.003Z"],
+		"transactionId": "af885605-973e-4ebf-92ce-a8cd010d8bb2"
+	},
+	"dataArea": {
+		"phoneNumber": ["0582725831",
+		"0582725831"],
+		"referenceDate": ["2024-05-04 03:12:02.751",
+		"2024-05-04 03:12:03.079"],
+		"customerIdentifier": ["594909f43972f1b78fb98526bcf2e74f",
+		"594909f43972f1b78fb98526bcf2e74f"]
+	}
+}
+
+Current PUT (Update) Payload: 
+
+The current payload for the PUT (update) Request is adding additional transaction object and user object – this is causing the duplication above:
+
+14 Aug 2024 10:49:43,919 INFO (WebContainer : 41) (BROWSER-1005871968) [HttpConnector:]: Http Request:{"userName":"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX","transac
+tionId":"1fb2903d-3abe-4d79-8d57-9c01466cb242","sessionId":"482f787a-7eb9-4b93-82ea-5208c56b1cc7","transactionType":"LOGIN","context":[{"type":"AUTHENTICATIO
+N","authentication":{"requirementsCombination":{"requirementId":"b950c446-3f7b-41a7-a74c-3fd733d1d8e7","metadata":{"tenantId":"tnt-fnh3br5y-tbdcvkty-3gvvdtxj
+v-42kmmf2n","userId":"sub-4rh9n35s-9e1wk1dn-atyjw3pw5-qbx619q7","transactionId":"1fb2903d-3abe-4d79-8d57-9c01466cb242","externalSessionId":"482f787a-7eb9-4b9
+3-82ea-5208c56b1cc7","qualifiedIdentity":{"namespace":"userName","id":"7b73e457af6bb6c46ecced0f5XXX88ed"},"timestamp":1723618183760,"mostRecentlyUsedDeviceId
+":"-1","language":["en"]},"combinationType":"REQUIREMENT","priority":0,"priorityReason":"ORG_EXPLICIT","requirement":{"type":"AUTHENTICATE","authenticator":{
+"channel":"EXTERNAL","bindChannel":"EXTERNAL","className":"UNP","validationMode":"EXTERNAL","deliveryMode":"DEFAULT","displayName":"UNP","mechanism":{"displa
+yName":"UNP","factorTypes":["KNOWLEDGE"],"mechanismType":"EXTERNAL","mode":"PRIMARY"},"preference":0,"strength":0,"currentFailureCount":0,"dynamicLinkingFlag
+":false,"templates":{},"restrictions":[],"restricted":false,"additionalAttributes":{"maxChallenges":"5","maxAttempts":"3","PERSISTANT_DATA":"false","EXCHANGE
+_SDK_DATA":"false"}},"channel":"EXTERNAL","validationMode":"EXTERNAL","deliveryMode":"DEFAULT","challengeData":[{"id":"CS_TITLE","displayValue":"login"},{"id
+":"CS_TOTAL_AMOUNT","displayName":"TOTAL_AMOUNT","displayValue":""},{"id":"CS_AUTH_CODE","displayName":"AUTH_CODE","displayValue":"67075478"}],"timestamp":0}
+,"timestamp":1723618183794},"result":{"result":"SUCCESS"},"resultsMap":{"b950c446-3f7b-41a7-a74c-3fd733d1d8e7":{"result":"SUCCESS"}},"completedTimestamp":172
+3618183863}}, {"type":"TRANSACTION","transaction":{"additionalTransactionInformation":{"forgotPasswordInHours":"19655","authmessage_en":"Swipe to complete you
+r login to FAB Online Banking","transactionDateTime":"2024-XX-XXT10:49:43.043Z","forgotPINInHours":"9999","mobileBankingLock":"false","custOnboardInDays":"90
+4","channel":"IB","pinChangedInDays":"9999","IB_AUTH":"MOBILE","simSwapReferenceInHours":"720","phoneNumber":"0XXXXX1580","internetBankingLock":"false","coun
+tryOfOrigin":"AE","referenceDate":"2024-XX-XX 10:49:43.911","authmessage_ar":"Swipe to complete your login to FAB Online Banking","pwdChangedInDays":"9999"}}
+},{"source":"DECISION_REQUEST","type":"USER","user":{"externalUniqueId":"7b73e457af6bb6c46ecced0f5XXX88ed","additionalAttributes":{"device_id":"br_083e0849-d
+7ad-4ea7-aa91-dac8a882fabe"},"timestamp":1723618183911}}],"authenticator":"UNP","language":"en"} 
+
+
+Proposed Solution for the above context:
+
+In the FAB Code base - Remove ONLY the Transaction Object and User Object from the PUT (Update) ETG Call. Everything else should remain the same.
+
+SAMPLE PUT (Update) Request Body:
+
+{
+    "request": {
+        "metadata": {
+            "tenantId": "{{tenantId}}",
+            "timestamp": {{currentTime}},
+            "externalSessionId": "sessionID",
+            "transactionId": "transactionId",
+            "qualifiedIdentity": {
+                "id": "amuhaimin",
+                "namespace": "userName"
+            }
+        },
+        "transaction": {
+            "brand": {
+                "value": "{{organisationId}}"
+            },
+            "type": {
+                "value": "login"
+            },
+            "channel": {
+                "value": "IB"
+            }
+        },
+        "context": [
+            {
+                "type": "AUTHENTICATION",
+                "authentication": {
+                    "requirementsCombination": {{requirementsCombination}},
+                    "result":{
+                        "result":"SUCCESS"
+                    },
+                    "resultsMap": {
+                        "{{requirementId}}": {
+                            "result": "SUCCESS"
+                        }
+                    },
+                    "completedTimestamp": {{currentTime}}
+                }
+            }
+        ],
+        "authenticator": "UNP",
+        "language": "en"
+    }
+}
+
+
+The result should be (Example):
+
+{"applicationArea":{"senderId":"IB","countryOfOrigin":"AE","transactionDateTime":"2024-XX-XXT10:49:43.043Z","transactionId":"txn-50fe9045-6ffa-4d9f-b182-8b938a4ef2bb"},"dataArea":{"phoneNumber":"0XXXXX1580","referenceDate":"2024-XX-XX 10:49:43.911","customerIdentifier":"7b73e457af6bb6c46ecced0f5XXX88ed"}}
+
+
+NOTE:
+
+This has been tested on the IB Login Journey within the Callsign Environment. This must be tested within the on-prem solution within the FAB environment before applying the change to PROD. 
+
+It is strongly recommended to setup the FAB UAT or FAB Non-PROD environment with the same Initial POST ETG call and Update PUT ETG API calls with the same configurations and codebase as per the PROD environment. This should also include a working Sim Swap Service.  
+
+////////////////////
 public ETGTransactionRequest getEtgRequest(CsTransactionRequest csTransactionRequest, ContextTypeEnum contextType) {
 		ETGTransactionRequest etgRequest = new ETGTransactionRequest();
 		if (Objects.isNull(csTransactionRequest) || (StringUtils.isBlank(csTransactionRequest.getCsTransactionId())
