@@ -1,18 +1,20 @@
-I wanted to give you a heads-up that I’m planning to take some time off next month for vacation. I’ll make sure everything is in place before I go, and I’ll provide a thorough knowledge transfer to the team to ensure things run smoothly while I’m away.
+		public APIResponse prefThemeUpdate(ThemeUpdateRequest request) {
+			APIResponse apiResponse = new APIResponse();
+			return execute(request, apiResponse, req -> {
+				if (StringUtils.isBlank(request.getAppTheme()) || !AVAILABLE_THEMES.contains(request.getAppTheme())) {
+					request.setAppTheme(CLASSIC_APP_THEME);
+				}
+				channelInfoRepository.updateAppTheme(request.getAppTheme());
+				String key = AppConstants.CUST_APP_THEME + SessionContext.getSession().getUser().getCin();
+				CustomerAppThemeDetails customerAppTheme = (CustomerAppThemeDetails) cacheHelper
+						.getFromUserDataCache(key);
+				customerAppTheme.setDefaultTheme(request.getAppTheme());
+				cacheHelper.addToUserDataCache(key, customerAppTheme);
+				return apiResponse;
+			});
+		}
 
-Let me know if there’s anything specific you’d like me to focus on or arrange beforehand. I’ll share the exact dates once finalized.
 
-Mcsend is live in production 2 years back
- 
-It is become BAU now
- 
-Still we are supporting for any enhancements and issue
- 
-Luke asked me give handover to you a month back
- 
-But since you were busy so abhi I thought ki handover de du
- 
-Iske baad I’ll handover for card control also
  
 5 min do
  
