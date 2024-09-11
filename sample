@@ -1,4 +1,65 @@
-        CfnParameter envParameter = new CfnParameter(this, "env",
+import software.amazon.awscdk.services.s3.Bucket;
+import software.amazon.awscdk.services.s3.IBucket;
+import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
+import software.amazon.awscdk.services.s3.notifications.NotificationKeyFilter;
+import software.amazon.awscdk.services.s3.EventType; // Correct import for event type
+import software.amazon.awscdk.services.ssm.CfnParameter;
+import software.amazon.awscdk.services.ssm.CfnParameterProps;
+import software.amazon.awscdk.services.lambda.Function;
+import software.amazon.awscdk.services.lambda.LayerVersion;
+import software.amazon.awscdk.services.lambda.ILayerVersion;
+import software.amazon.awscdk.services.iam.IRole;
+import software.amazon.awscdk.services.iam.Role;
+import software.amazon.awscdk.services.kms.IKey;
+import software.amazon.awscdk.services.kms.Key;
+import software.constructs.Construct;
+import java.util.List;
+import java.util.Map;
+
+CfnParameter envParameter = new CfnParameter(this, "env",
+        CfnParameterProps.builder().defaultValue("local").build());
+CfnParameter regionParameter = new CfnParameter(this, "region",
+        CfnParameterProps.builder().defaultValue("me-central-1").build());
+CfnParameter accountIdParameter = new CfnParameter(this, "account",
+        CfnParameterProps.builder().defaultValue("517606038493").build());
+CfnParameter kmsAccountIdParameter = new CfnParameter(this, "kms-account",
+        CfnParameterProps.builder().defaultValue("644749578616").build());
+
+CfnParameter vpcIdParameter = new CfnParameter(this, "vpcId",
+        CfnParameterProps.builder().type("AWS::EC2::VPC::Id").build());
+CfnParameter appSubnetIdsParameter = new CfnParameter(this, "appSubnetIds",
+        CfnParameterProps.builder().type("List<AWS::EC2::Subnet::Id>").build());
+
+CfnParameter xksKeyIdParameter = new CfnParameter(this, "xksKeyId",
+        CfnParameterProps.builder().defaultValue("cc63e70e-6095-42fa-9fa0-a7c20a726de9").build());
+
+CfnParameter s3BucketParameter = new CfnParameter(this, "s3Bucket",
+        CfnParameterProps.builder().defaultValue("ibmb-gfri-reports").build());
+
+CfnParameter s3bucketPathParameter = new CfnParameter(this, "bucketPath",
+        CfnParameterProps.builder().defaultValue("negative-country-phase0/input/").build());
+
+// Lambda Configuration parameters
+CfnParameter memorySizeParameter = new CfnParameter(this, "memorySize",
+        CfnParameterProps.builder().type("Number").defaultValue(128).build()); // Corrected to Number
+CfnParameter lambdaTimeoutParameter = new CfnParameter(this, "timeout-seconds",
+        CfnParameterProps.builder().type("Number").defaultValue(60).build()); // Corrected to Number
+CfnParameter deploymentBucketParameter = new CfnParameter(this, "deployment-bucket",
+        CfnParameterProps.builder().defaultValue("ibmb-ms-deployment-dev-uae").build());
+CfnParameter deploymentFileParameter = new CfnParameter(this, "deployment-file-name",
+        CfnParameterProps.builder().defaultValue("lambda/deployment/sanction-country-report_v1.zip").build());
+CfnParameter layerVersionParameter = new CfnParameter(this, "python-layer-version",
+        CfnParameterProps.builder().defaultValue(20).build()); // Corrected to Number
+
+// Updated to use EventType.OBJECT_CREATED
+ibucket.addEventNotification(EventType.OBJECT_CREATED, new LambdaDestination(sanctionCountryReportFunction),
+        NotificationKeyFilter.builder()
+                .prefix(s3BucketPath)
+                .suffix(".csv")
+                .build());
+
+=-----------
+CfnParameter envParameter = new CfnParameter(this, "env",
                 CfnParameterProps.builder().defaultValue("local").build());
         CfnParameter regionParameter = new CfnParameter(this, "region",
                 CfnParameterProps.builder().defaultValue("me-central-1").build());
