@@ -1,11 +1,99 @@
-import software.amazon.awscdk.services.lambda.destinations.S3EventSource;
-import software.amazon.awscdk.services.lambda.notifications.NotificationKeyFilter;
-import software.amazon.awscdk.services.s3.Bucket;
-import software.amazon.awscdk.services.s3.IBucket;
-import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
-import software.amazon.awscdk.services.ssm.CfnParameterProps;
-import software.amazon.awscdk.services.s3.events.S3EventSource;
-import software.amazon.awscdk.services.s3.eventsource.NotificationKeyFilter;
+        CfnParameter envParameter = new CfnParameter(this, "env",
+                CfnParameterProps.builder().defaultValue("local").build());
+        CfnParameter regionParameter = new CfnParameter(this, "region",
+                CfnParameterProps.builder().defaultValue("me-central-1").build());
+        CfnParameter accountIdParameter = new CfnParameter(this, "account",
+                CfnParameterProps.builder().defaultValue("517606038493").build());
+        CfnParameter kmsAccountIdParameter = new CfnParameter(this, "kms-account",
+                CfnParameterProps.builder().defaultValue("644749578616").build());
+
+        CfnParameter vpcIdParameter = new CfnParameter(this, "vpcId",
+                CfnParameterProps.builder().type("AWS::EC2::VPC::Id").build());
+        CfnParameter appSubnetIdsParameter = new CfnParameter(this, "appSubnetIds",
+                CfnParameterProps.builder().type("List<AWS::EC2::Subnet::Id>").build());
+
+        CfnParameter xksKeyIdParameter = new CfnParameter(this, "xksKeyId",
+                CfnParameterProps.builder().defaultValue("cc63e70e-6095-42fa-9fa0-a7c20a726de9").build());
+
+        CfnParameter s3BucketParameter = new CfnParameter(this, "s3Bucket",
+                CfnParameterProps.builder().defaultValue("ibmb-gfri-reports").build());
+
+        CfnParameter s3bucketPathParameter = new CfnParameter(this, "bucketPath",
+                CfnParameterProps.builder().defaultValue("negative-country-phase0/input/").build());
+
+        // Lambda Configuration parameters
+        CfnParameter memorySizeParameter = new CfnParameter(this, "memorySize",
+                CfnParameterProps.builder().type("Number").defaultValue("128").build());
+        CfnParameter lambdaTimeoutParameter = new CfnParameter(this, "timeout-seconds",
+                CfnParameterProps.builder().type("Number").defaultValue("60").build());
+        CfnParameter deploymentBucketParameter = new CfnParameter(this, "deployment-bucket",
+                CfnParameterProps.builder().defaultValue("ibmb-ms-deployment-dev-uae").build());
+        CfnParameter deploymentFileParameter = new CfnParameter(this, "deployment-file-name", CfnParameterProps
+                .builder().defaultValue("lambda/deployment/sanction-country-report_v1.zip").build());
+        CfnParameter layerVersionParameter = new CfnParameter(this, "python-layer-version",
+                CfnParameterProps.builder().defaultValue("20").build());
+
+        // Environment variables for Lambda function
+        CfnParameter certificatePasswordParameter = new CfnParameter(this, "certificate-password",
+                CfnParameterProps.builder().defaultValue("xxxxx").build());
+        CfnParameter toAddressParameter = new CfnParameter(this, "to-address",
+                CfnParameterProps.builder().defaultValue("vishal.jagtap@bankfab.com").build());
+        CfnParameter fetchCinCifByRefIdServiceUrlParameter = new CfnParameter(this, "fetch-cin-cif-service-url", CfnParameterProps.builder()
+                .defaultValue("https://api-sit.digital-ibmb-dev.aeapps.bankfab.com/pbdb/v1/customer/cust-id-info").build());
+        CfnParameter sendEmailServiceUrlParameter = new CfnParameter(this, "send-email-service-url", CfnParameterProps.builder()
+                .defaultValue("https://kproxy-uat.pcdigital-dev.aeapps.bankfab.com/NotificationService/nsapi/email/sendemail").build());
+        CfnParameter getCustDetailsServiceUrlParameter = new CfnParameter(this, "get_customer_details", CfnParameterProps.builder()
+                .defaultValue("https://dpuat.bankfab.com:2038/customeronboarding/v2/customer-details").build());
+
+        String env = envParameter.getValueAsString();
+        String region = regionParameter.getValueAsString();
+        String account = accountIdParameter.getValueAsString();
+        String kmsAccount = kmsAccountIdParameter.getValueAsString();
+        String s3Arn = "arn:aws:s3:::" + s3BucketParameter.getValueAsString();
+        String s3BucketPath = s3bucketPathParameter.getValueAsString();
+
+        String vpcId = vpcIdParameter.getValueAsString();
+        List<String> subnetIds = appSubnetIdsParameter.getValueAsList();
+
+        String xksKeyId = xksKeyIdParameter.getValueAsString();
+
+        Number memorySize = memorySizeParameter.getValueAsNumber();
+        Number lambdaTimeout = lambdaTimeoutParameter.getValueAsNumber();
+        String deploymentBucketName = deploymentBucketParameter.getValueAsString();
+        String deploymentFileKey = deploymentFileParameter.getValueAsString();
+        String layerVersion = layerVersionParameter.getValueAsString();
+
+        String certificatePassword = certificatePasswordParameter.getValueAsString();
+        String toAddress = toAddressParameter.getValueAsString();
+        String fetchCinCifByRefIdServiceUrl = fetchCinCifByRefIdServiceUrlParameter.getValueAsString();
+        String sendEmailServiceUrl = sendEmailServiceUrlParameter.getValueAsString();
+        String getCustomerDetailsUrl = getCustDetailsServiceUrlParameter.getValueAsString();
+
+        Map<String, String> lambdaEnvVariableMap = getEnvVariableMap(env, certificatePassword,
+                toAddress, fetchCinCifByRefIdServiceUrl, sendEmailServiceUrl, getCustomerDetailsUrl);
+
+        IKey kmsKey = Key.fromKeyArn(this, "kmsKey", "arn:aws:kms:" + region + ":" + kmsAccount + ":key/" + xksKeyId);
+
+        ILayerVersion lambdaLayerVersion = LayerVersion.fromLayerVersionArn(this, "lambda-py-layer",
+                "arn:aws:lambda:" + region + ":" + account + ":layer:lambda-py-layer:" + layerVersion);
+
+        IBucket ibucket = Bucket.fromBucketArn(this, "negative-country-report-bucket", s3Arn);
+
+        IRole scReportRole = Role.fromRoleName(this, "scReportRoleId", "sc-report-role-iam-lambda-" + env);
+
+        Function sanctionCountryReportFunction = sanctionCountryReportFunction(id, env, vpcId, subnetIds,
+                memorySize, lambdaTimeout, deploymentBucketName, deploymentFileKey, lambdaLayerVersion, kmsKey,
+                scReportRole, lambdaEnvVariableMap);
+
+        // Grant Lambda function read access to the S3 bucket
+        ibucket.grantRead(sanctionCountryReportFunction);
+
+        // Add an event notification for when an object is created in the S3 bucket
+        ibucket.addEventNotification(S3EventSource.OBJECT_CREATED, new LambdaDestination(sanctionCountryReportFunction),
+                NotificationKeyFilter.builder()
+                        .prefix(s3BucketPath)
+                        .suffix(".csv")
+                        .build());
 
 public APIResponse prefThemeUpdate(ThemeUpdateRequest request) {
 			APIResponse apiResponse = new APIResponse();
