@@ -1,4 +1,13 @@
-		public APIResponse prefThemeUpdate(ThemeUpdateRequest request) {
+import software.amazon.awscdk.services.lambda.destinations.S3EventSource;
+import software.amazon.awscdk.services.lambda.notifications.NotificationKeyFilter;
+import software.amazon.awscdk.services.s3.Bucket;
+import software.amazon.awscdk.services.s3.IBucket;
+import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
+import software.amazon.awscdk.services.ssm.CfnParameterProps;
+import software.amazon.awscdk.services.s3.events.S3EventSource;
+import software.amazon.awscdk.services.s3.eventsource.NotificationKeyFilter;
+
+public APIResponse prefThemeUpdate(ThemeUpdateRequest request) {
 			APIResponse apiResponse = new APIResponse();
 			return execute(request, apiResponse, req -> {
 				if (StringUtils.isBlank(request.getAppTheme()) || !AVAILABLE_THEMES.contains(request.getAppTheme())) {
