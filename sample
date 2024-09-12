@@ -1,4 +1,10 @@
 data = json.dumps(message)
+data = {
+    "customerId": "your_customer_id_value"  # Replace with the actual customer ID
+}
+
+# Convert the dictionary to a JSON object
+json_object = json.dumps(data, indent=4)
 
 
 import software.amazon.awscdk.services.s3.Bucket;
