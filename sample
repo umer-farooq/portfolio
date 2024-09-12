@@ -1,3 +1,6 @@
+data = json.dumps(message)
+
+
 import software.amazon.awscdk.services.s3.Bucket;
 import software.amazon.awscdk.services.s3.IBucket;
 import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
