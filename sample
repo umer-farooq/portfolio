@@ -5,6 +5,7 @@ Parameterstore -> service urls
 Challege:
 ->When this was deployed there were no concept of roles.
 ->Naming convention of lambda -> Country-Santury-sit, if I change it to proper conv, so I need to recreate the lambda and associate with existing bucket, if I dont change it fetch param store will not work
+-> S3 Bucket data should not be lost
 -> When the resource is created without CDK:
 Jab tum existing bucket ko use kar rahe ho (jo pehle se bana hua hai) aur uske sath event source mapping karne ki koshish karte ho, to CloudFormation ko bucket ki presence ka pata nahi hota. 
 Is wajah se, wo kuch extra resources create karne ki koshish karta hai, jaise IAM roles, jo tumhare permission restrictions ki wajah se fail hota hai.
@@ -20,6 +21,62 @@ Matlab yeh ke tum ek time pe sirf ek hi event ko associate kar sakte ho, jaise k
 
 Existing Resources Handling: 
 Manual Process: Sai yeh suggest kar raha hai ke kuch cases main tumhe manual intervention karna par sakta hai, jaise S3 bucket se event notifications ko manually remove karna ya nayi notifications dalna.
+
+------------------------------------
+Umer, jo tumhara issue hai, us mein Pune region ke liye international fund transfers mein ek problem aa rahi hai, specifically jab Jordan country ke liye transfers ho rahe hain. Problem ye hai ke middleware se T24 system tak jo data jaa raha hai, us mein galat tag lag raha hai. Expected tag hai 57B, lekin system mein 57A tag lag raha hai. Yeh issue tab aa raha hai jab beneficiary ke pass dono Swift code aur routing code diye jaa rahe hain.
+
+Main Issue:
+Jab customer beneficiary add karta hai dono Swift code aur routing code ke sath, middleware pehle routing code check karta hai, aur agar routing code hai, to wahi T24 system mein send kar deta hai. 
+Agar routing code nahi milta, to Swift code check kiya jata hai.
+Yeh problem Jordan transfers ke liye aa rahi hai, kyunki Jordan ke liye table mein rules set nahi the. Is wajah se dono Swift aur routing codes middleware mein jaa rahe the, jo galat tag ban raha tha.
+Tumhe ek specific table mein configuration karni hogi jo Jordan ke liye sirf Swift code ko mandatory banaye aur routing code ko ignore kare.
+Code mein kya search karna hai:
+Tumhe code mein "transfer routing code rules" ya "routing logic" wali table ko check karna hai. Yeh table country-specific rules set karti hai ke kis country ke liye Swift ya routing code mandatory hai.
+Middleware ya T24 system ke tag generation logic ko dekhna hoga, jo Swift aur routing code ke basis par tag 57B ya 57A assign karta hai.
+Analysis mein kya share karna hai:
+Root Cause: Explain karo ke problem tab aa rahi hai jab Jordan transfers ke liye dono Swift aur routing code diye ja rahe hain, lekin table mein rules nahi hain is country ke liye.
+Table Configuration: Batana hoga ke tumne Jordan ke liye table mein rules update kar diye hain jahan sirf Swift code mandatory hoga aur routing code ignore hoga.
+Next Steps: Tumhare team ke sath discuss karo ke SI transfers mein bhi wahi table refer ki jaaye jo non-SI transfers ke liye ho rahi hai, taki future mein yeh problem dubara na aaye.
+Is tarah se tum apna analysis present kar sakte ho, aur code check karne ke liye yeh specific logic ko dhundhoge.
+
+
+
+
+
+
+
+You said:
+Can you explain what is meant by swift code and routing code?
+ChatGPT said:
+ChatGPT
+Swift code aur routing code dono hi financial identifiers hain jo international aur domestic fund transfers mein use hote hain, lekin inka kaam thoda alag hota hai.
+
+Swift Code:
+Swift code ko "Society for Worldwide Interbank Financial Telecommunication" code bhi kehte hain. Yeh ek unique identifier hota hai jo banks ya financial institutions ko globally identify karne ke liye use hota hai. Jab tum international fund transfer karte ho, Swift code sender aur receiver bank ke beech communication ko simplify karta hai aur ensures karta hai ke paisa sahi bank ko transfer ho raha hai. Swift code mein general format 8 ya 11 characters ka hota hai:
+
+First 4 letters: Bank ka code
+Next 2 letters: Country code
+Next 2 letters: Location code
+Last 3 letters (optional): Branch code
+Example: HSBCGB2L (HSBC Bank ka Swift code UK mein).
+
+Routing Code:
+Routing code ko Routing Transit Number (RTN) ya ABA number bhi kehte hain, aur yeh specific banks ke liye hota hai jo mostly domestic (local) transfers ke liye use hota hai, especially USA aur Canada mein. Routing code bank aur uske specific branch ko identify karta hai, aur ensure karta hai ke paisa sahi branch mein pohonche.
+
+Routing code generally 9 digits ka hota hai.
+
+Example: 021000021 (JPMorgan Chase Bank ka routing number USA mein).
+Key Difference:
+Swift code international transfers ke liye use hota hai.
+Routing code domestic (within-country) transfers ke liye use hota hai, especially in countries like the USA.
+Tumhare case mein, jab Swift aur routing code dono diya jaata hai, system ko confusion hoti hai kis code ko use kare. Is liye, tumhare code mein check ho raha hai ke kis country ke liye kaunsa code mandatory hai aur based on that, middleware ya T24 system sahi tag assign karta hai.
+
+
+
+
+
+
+
 
 
 
