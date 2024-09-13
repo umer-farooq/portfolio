@@ -1,7 +1,49 @@
+Change the code of lambda to use pb-core with less minimum efforts
+PBcore -> Paramstore, ssl context, rest connector
+Parameterstore -> service urls
+
+Challege:
+->When this was deployed there were no concept of roles.
+->Naming convention of lambda -> Country-Santury-sit, if I change it to proper conv, so I need to recreate the lambda and associate with existing bucket, if I dont change it fetch param store will not work
+-> When the resource is created without CDK:
+Jab tum existing bucket ko use kar rahe ho (jo pehle se bana hua hai) aur uske sath event source mapping karne ki koshish karte ho, to CloudFormation ko bucket ki presence ka pata nahi hota. 
+Is wajah se, wo kuch extra resources create karne ki koshish karta hai, jaise IAM roles, jo tumhare permission restrictions ki wajah se fail hota hai.
+
+New parameters such as ENV is missing
+
+Environment issues
+SIT Lambda role has not created.
+Issue yeh hai ke existing Lambda function ko update karte waqt CDK ke sath kuch issues aa rahe hain. Jab tum ek Lambda function ko existing S3 bucket ke sath associate karte ho, 
+to ek specific masla yeh hota hai ke S3 bucket pe sirf ek hi event notification configure ho sakti hai. 
+Matlab yeh ke tum ek time pe sirf ek hi event ko associate kar sakte ho, jaise ke staging environment ke liye tumhari Lambda chal rahi ho to doosri environment (SIT ya UAT) ke liye nahi chal sakti.
+
+
+Existing Resources Handling: 
+Manual Process: Sai yeh suggest kar raha hai ke kuch cases main tumhe manual intervention karna par sakta hai, jaise S3 bucket se event notifications ko manually remove karna ya nayi notifications dalna.
+
+
+
 PB-CORE
 LAYERS
 ENV
 Parameter store
+
+
+Background:
+Tumhara system AWS pe run ho raha hai jahan S3 bucket main koi file upload hoti hai, aur wo ek event trigger karta hai jo Lambda function ko activate karta hai. Tumhari request yeh hai ke jab bhi S3 main koi upload ho, Lambda automatically kaam kare.
+
+Problem:
+
+Key Issues:
+Single Event Notification: Agar tumhari S3 bucket already kisi Lambda function ko trigger kar rahi hai (jaise STG ke liye), to tum ussi bucket ko doosri Lambda ke sath (jaise UAT ya SIT ke liye) associate nahi kar sakte. Tumhe error milayga ya phir pehli wali configuration overwrite ho jaye gi.
+
+
+As a Backend Developer, tumhe kya samajhna chahiye:
+CDK Limitations: Tumhe yeh samajhna hoga ke CDK ke through existing resources ke sath interact karna problematic ho sakta hai, especially agar wo manually create ki gayi ho ya agar tumhare paas resources ko modify karne ka permission na ho.
+
+Manual Changes: Tumhare analysis ka ek part yeh hoga ke tum batao ke kin areas main manual configuration ki zaroorat par rahi hai, jaise S3 events ko delete karna ya Lambda functions ke parameters ko update karna.
+
+Role Handling: Tumhe yeh bhi dekhna hoga ke agar CDK roles create kar raha hai internally aur permission nahi mil rahi, to iska kya impact hoga aur kaise manually isko bypass kar sakte ho.
 
 Yes, there are a few approaches to handle existing resources, especially when using AWS CDK, and they can help you overcome the issues you're facing with event source mapping for existing S3 buckets and Lambda functions.
 
