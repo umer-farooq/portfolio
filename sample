@@ -1,3 +1,24 @@
+private void overrideSwiftOrRtCode(final ExecuteTransferRequest transferRequest) {
+		final List<RoutingRule> routingRules = staticDataRepository.getRoutingRulesByCountry(transferRequest.getBeneficiary().getCountry().getShortCode());
+		if(Objects.nonNull(routingRules) && !routingRules.isEmpty()) {
+			for (RoutingRule routingRule : routingRules) {
+				// Both either-or check
+				if(routingRule.getSwiftMandatory() && routingRule.getRoutingCodeMandatory()) {
+					if(StringUtils.isNotBlank(transferRequest.getBeneficiary().getRoutingCode())) {
+						// Swift code should not flow if routing code available
+						transferRequest.getBeneficiary().setSwiftCode(StringUtils.EMPTY);
+					} 
+				} else if(routingRule.getSwiftMandatory() && StringUtils.isNotBlank(transferRequest.getBeneficiary().getSwiftCode())) {
+					// Routing code should not flow if Swift code available
+					transferRequest.getBeneficiary().setRoutingCode(StringUtils.EMPTY);
+				} else if(routingRule.getRoutingCodeMandatory() && StringUtils.isNotBlank(transferRequest.getBeneficiary().getRoutingCode())) {
+					// Swift code should not flow if routing code available
+					transferRequest.getBeneficiary().setSwiftCode(StringUtils.EMPTY);
+				} 
+			}
+		}
+	}
+
 else if(FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER.compareTo(transferRequest.getFundTransferType()) == 0) {
 						// Server side dual validation to verify again
 						//validateAndOverrideSwiftOrRtCode(transferRequest);
