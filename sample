@@ -1,3 +1,40 @@
+else if(FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER.compareTo(transferRequest.getFundTransferType()) == 0) {
+						// Server side dual validation to verify again
+						//validateAndOverrideSwiftOrRtCode(transferRequest);
+						overrideSwiftOrRtCode(transferRequest);
+						// Apply override routing code rules
+						if(StringUtils.isNotBlank(transferRequest.getBeneficiary().getRoutingCode())) {
+							String routingCode = applyOverrideRoutingRule(transferRequest.getBeneficiary().getRoutingCode(), transferRequest.getBeneficiary().getBankName());
+							transferRequest.getBeneficiary().setRoutingCode(routingCode);	
+						}
+
+						if(LOCAL_CURRENCY.equals(destinationCurrency)) {
+							transferRequest.getBeneficiary().setCorrBankBicCode(settingsRepository.getSetting(NOSTRO_ACCOUNT+ UNDERSCORE + LOCAL_CURRENCY));
+						} else {
+							List<CorrespondentBankDetails> correnpondentBankDetailList = fundTransferRepo.getCorrenpondentBankDetails(transferRequest.getBeneficiary().getCountry().getShortCode(), destinationCurrency, transferRequest.getBeneficiary().getSwiftCode());
+							if(Objects.isNull(correnpondentBankDetailList) || correnpondentBankDetailList.isEmpty()) {
+								log.error("Correspondent bank details not mapped for country:{} , and currency:{} ",transferRequest.getBeneficiary().getCountry().getShortCode() , destinationCurrency);
+								apiResponse.setError(ErrorCodes.INT_TRANSFER_BANK_NOT_MAPPED,transferRequest.getBeneficiary().getCountry().getShortCode() , destinationCurrency );
+								return apiResponse;
+							}
+							if (correnpondentBankDetailList.size() > 1) {
+								overrideCorresBankDetails(transferRequest, correnpondentBankDetailList);
+							} else {
+								transferRequest.getBeneficiary().setCorrBankBicCode(PREFIX_SWIFT + correnpondentBankDetailList.get(0).getBicCode());
+							}	
+						}
+
+						//Modify paymentDescription to append purpose code
+						//TICR-142: Purpose code changes
+						if (FundTransferTypes.INTERNATIONAL_FUNDS_TRANSFER
+								.compareTo(transferRequest.getFundTransferType()) == 0
+								&& destinationCurrency.equalsIgnoreCase(AppConstants.CURRENCY_INR)) {
+							String purposeCode = getPurposeCodeForSwiftInr(transferRequest);
+							String txnPurposeCode = "/" + purposeCode + "/";
+							transferRequest
+							.setTransferDescription(txnPurposeCode + transferRequest.getTransferDescription());
+						}
+
 Change the code of lambda to use pb-core with less minimum efforts
 PBcore -> Paramstore, ssl context, rest connector
 Parameterstore -> service urls
