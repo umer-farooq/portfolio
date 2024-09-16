@@ -1,3 +1,5 @@
+CR description: Increase the number of log files in IBMB to ensure logs are not stopped when the threshold level of 1550 is reached.
+
 public FundsTransferRequest prepareFundsTransferReq(final SIDetails siDetails, final Beneficiary beneficiary, final TemplateId transferType) {
     // Call the new method to override Swift or Routing Code based on the rules
     overrideSwiftOrRoutingCode(siDetails, beneficiary);
