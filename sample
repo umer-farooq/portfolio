@@ -1,3 +1,14 @@
+Component	Class	Existing/New	Method(s) Impacted/Added	Description of Impact	Class Responsibilities
+Transfer Execution	FundTransferSF	Existing	executeTransfer	Modified to call notifyPaymentSuccess for WITHIN_UAE_FUNDS_TRANSFER and WITHIN_BANK_FUNDS_TRANSFER.	Handles the main logic for executing various types of fund transfers. Manages notifications for successful transfers.
+Existing	notifyPaymentSuccess	Updated to handle PDF generation (via TransferPdfHelper), encryption (via PdfHelper), and call the new processNotificationWithAttachment in NotificationServiceSF.	Coordinates the creation and dispatch of success notifications for transfer processes.
+PDF Generation	TransferPdfHelper	New	generateTransferAdvicePdf	New method for generating transfer advice PDFs specific to WITHIN_UAE and WITHIN_BANK transfers.	Responsible for generating PDFs related to fund transfer advice, leveraging the document service.
+PDF Encryption	PdfHelper	Existing	encryptPdf	Utilized to encrypt the generated PDF file. No changes required in this class.	Handles the encryption of PDF documents, ensuring secure handling of sensitive information.
+Notification	NotificationServiceSF	New	processNotificationWithAttachment	New method to send an email notification with an attachment (encrypted PDF) without involving SMS or digital notifications.	Manages the processing and dispatch of notifications (email, SMS) for various banking activities.
+Document Service	DocumentService	Existing	invokePost	Indirectly used for transfer advice PDF generation within TransferPdfHelper. No changes required in the method itself.	Interacts with the document generation service to create various PDF documents required for bank operations.
+Data Models	ExecuteTransferRequest, ExecutePaymentResponse, SessionInfo, User	Existing	N/A	No direct changes, but they provide necessary data for PDF generation and notification.	Represents data structures used in fund transfers, providing the necessary information to generate and send notifications.
+Attachment Handling	TessAttachment	Existing	N/A	Used to create attachment objects for the encrypted PDF files. No changes required.	Represents file attachments to be sent in email notifications.
+Notification Content	ContentID	Existing	N/A	Potential addition of new content IDs for transfer advice notifications.	Identifies content templates for email notifications, facilitating dynamic content generation.
+
 Main Issue: When a customer adds a beneficiary with both a Swift code and a routing code, the middleware first checks for the routing code. If the routing code is present, it sends that to the T24 system. If the routing code is not found, it then checks for the Swift code.
 
 The problem arises with transfers to Jordan because there were no rules set for Jordan in the table. As a result, both the Swift and routing codes were being sent to the middleware, leading to incorrect tags being generated.
