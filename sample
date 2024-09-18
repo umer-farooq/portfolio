@@ -1,3 +1,9 @@
+Main Issue: When a customer adds a beneficiary with both a Swift code and a routing code, the middleware first checks for the routing code. If the routing code is present, it sends that to the T24 system. If the routing code is not found, it then checks for the Swift code.
+
+The problem arises with transfers to Jordan because there were no rules set for Jordan in the table. As a result, both the Swift and routing codes were being sent to the middleware, leading to incorrect tags being generated.
+
+You need to configure a specific table that makes the Swift code mandatory for Jordan and ignores the routing code.
+
 CR description: Increase the number of log files in IBMB to ensure logs are not stopped when the threshold level of 1550 is reached.
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration>
