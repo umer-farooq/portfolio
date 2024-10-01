@@ -1,3 +1,24 @@
+In the current implementation of SIUtility.java, a method that prepares or validates a fund transfer request would be the ideal place to incorporate this new method. From the earlier exploration of SIUtility.java, a candidate method is:
+
+Method to Call the New Method
+prepareFundsTransferReq(SIDetails siDetails, Beneficiary beneficiary, TemplateId transferType): This method prepares the transfer request and includes a reference to both siDetails and beneficiary, which matches the parameters of the new method.
+Where to Insert the Call
+Add the call to overrideSwiftOrRoutingCode(siDetails, beneficiary); at the beginning of the prepareFundsTransferReq method to ensure the codes are validated and set correctly before the transfer request is processed.
+
+Code Snippet to Modify prepareFundsTransferReq
+Here’s an example of how you can modify the prepareFundsTransferReq method to include the new call:
+
+java
+Copy code
+public FundsTransferRequest prepareFundsTransferReq(final SIDetails siDetails, final Beneficiary beneficiary, final TemplateId transferType) {
+    // Call the new method to override Swift or Routing Code based on the rules
+    overrideSwiftOrRoutingCode(siDetails, beneficiary);
+
+    // Existing logic for preparing the funds transfer request
+    ...
+}
+Please insert this call at the start of the prepareFundsTransferReq method in SIUtility.java. If you encounter any specific difficulties or need further assistance, let me know!
+
 Requirement ID: BR-002
 Description: If the user's password has expired, the system shall require the user to change their password upon the next login.
 Acceptance Criteria:
