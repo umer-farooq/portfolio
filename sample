@@ -1,3 +1,194 @@
+Requirement ID: BR-002
+Description: If the user's password has expired, the system shall require the user to change their password upon the next login.
+Acceptance Criteria:
+The front end shall redirect the user to the password change screen if the password is flagged as expired.
+The user shall not be able to access other system features until the password is successfully changed.
+On successful password change, update the "last password update date" to the current date in the database.
+3.3 Reset Password Flow
+Requirement ID: BR-003
+Description: When a user resets their password (e.g., forgot password flow), the system shall update the "last password update date."
+Acceptance Criteria:
+During the reset password process, once the user successfully sets a new password, update the "last password update date" to the current date in the database.
+3.4 Handling Null Values for "Last Password Update Date"
+Requirement ID: BR-004
+Description: The system shall handle scenarios where the "last password update date" is null to ensure the password expiry logic functions correctly.
+Acceptance Criteria:
+If the "last password update date" is null during the login check, set it to the user's account creation date.
+Alternatively, force the user to change their password immediately if the "last password update date" is null.
+Update the "last password update date" to the current date once the password is successfully changed or reset.
+3.5 Database Constraint for "Last Password Update Date"
+Requirement ID: BR-005
+Description: Introduce a database constraint to prevent null values in the "last password update date" column for new records.
+Acceptance Criteria:
+Set a default value (e.g., account creation date) for the "last password update date" column during user registration.
+4. Non-Functional Requirements
+The solution should not degrade the user experience.
+The implementation should be scalable to handle all users in the system.
+The changes should comply with the organization's security and data integrity policies.
+5. Impact Analysis
+Login Service: Update the login service to include the password expiry check logic.
+Change Password API: Modify the API to update the "last password update date" upon successful password change.
+Reset Password API: Ensure the "last password update date" is updated when the password is reset.
+Database: Implement changes to handle null values in the "last password update date" and introduce a default value.
+6. Testing and Validation
+Test the password expiry check logic with various date scenarios (e.g., within 90 days, exactly 90 days, beyond 90 days).
+Validate the forced password change workflow when the password is expired.
+Verify that the "last password update date" is updated correctly during password change and reset flows.
+Test the system’s behavior when the "last password update date" is initially null.
+7. Dependencies
+Changes in the login and password management services.
+Frontend changes to handle the redirection to the password change screen.
+Database schema modifications to handle default values for "last password update date."
+8. Risks
+User disruption if not properly communicated, especially for the first-time implementation of password expiry.
+Database schema changes may require careful migration for existing user records.
+
+------------------------------
+The extracted codebase contains several Java files. To implement the changes for the "forget password" feature, we will focus on the following:
+
+Password Expiry Check:
+
+Locate the part of the code where user login is handled. This is typically in files related to user authentication, such as LoginService, UserService, or AuthenticationController.
+Implement logic to compare the "last password update date" with the current date plus 90 days. If it exceeds, set a flag to indicate that a password change is required.
+Change Password Flow:
+
+Look for the file handling the change password API, often named something like ChangePasswordService or PasswordController.
+After the password is successfully updated, include code to update the "last password update date" to the current date.
+Reset Password Flow:
+
+Find the reset password API (possibly in a file like ResetPasswordService or PasswordController).
+Ensure that the code updates the "last password update date" to the current date whenever a reset password action occurs.
+I will now examine the contents of files that are likely to contain these functionalities to provide more specific instructions. Let's start by searching for keywords like "login," "password," or "reset" within the Java files to pinpoint the relevant code. ​​
+
+Based on the search results, some key files in your codebase related to login, password change, and reset operations include:
+
+Password Expiry Check and Login:
+
+/src/main/java/com/fab/pb/services/login/facades/VerifyUserLoginSF.java
+/src/main/java/com/fab/pb/services/login/facades/VerifyUserLoginV2SF.java
+These files handle the user login process. Here, you need to:
+
+Implement the logic to compare the "last password update date" with the current date + 90 days.
+If the condition is met (90 days passed), set a flag to indicate that a password change is required and include this in the login response.
+Change Password Flow:
+
+/src/main/java/com/fab/pb/services/login/facades/UpdateCredentialSF.java
+This file is likely responsible for updating user credentials (password). Here, you need to:
+
+After successfully updating the password, also update the "last password update date" column with the current date.
+Reset Password Flow:
+
+/src/main/java/com/fab/pb/services/login/facades/ResetCredentialSF.java
+This file handles the reset password logic. Here, you need to:
+
+Once the password is reset, update the "last password update date" to the current date.
+PGS Issue Handling (If applicable):
+
+No specific file indicates direct handling of PGS in the search results. However, the changes for PGS could be related to the login check and the response you send back to the frontend.
+Next Steps:
+Modify the code in VerifyUserLoginSF.java or VerifyUserLoginV2SF.java to include the password expiry check logic.
+Update UpdateCredentialSF.java to set the "last password update date" when the password is changed.
+Modify ResetCredentialSF.java to update the "last password update date" when the password is reset.
+If you'd like, I can open these files and look at specific lines for more detailed instructions. Let me know how you want to proceed! ​​
+
+
+
+
+
+
+You said:
+Yes please proceed and share the updated code
+ChatGPT said:
+ChatGPT
+Here are the relevant code changes required to implement the password expiry check and update the "last password update date":
+
+1. Password Expiry Check in VerifyUserLoginSF.java and VerifyUserLoginV2SF.java:
+These files handle user login. We will add logic to check the "last password update date" and compare it with the current date + 90 days. If the password has expired, set a flag in the response.
+Code Snippet for VerifyUserLoginSF.java (Modify Around Line 464):
+java
+Copy code
+// Assuming 'userChannel' has the 'lastPasswordUpdateDate' field
+LocalDate lastPasswordUpdateDate = userChannel.getLastPasswordUpdateDate();
+LocalDate currentDate = LocalDate.now();
+LocalDate expiryDate = lastPasswordUpdateDate.plusDays(90);
+
+if (expiryDate.isBefore(currentDate)) {
+    // Password expired, set a flag in the response
+    verifyUserLoginResponse.setPasswordChangeRequired(true);
+} else {
+    // Password not expired
+    verifyUserLoginResponse.setPasswordChangeRequired(false);
+}
+Add similar logic in VerifyUserLoginV2SF.java around the success response handling (near line 176).
+2. Update "last password update date" in UpdateCredentialSF.java:
+When the password is updated, modify the code to also update the "last password update date" field in the database.
+Code Snippet for UpdateCredentialSF.java (Modify Around the Password Update Logic):
+java
+Copy code
+// Assuming 'userChannel' is available and has a method to set 'lastPasswordUpdateDate'
+userChannel.setLastPasswordUpdateDate(LocalDate.now());
+// Save 'userChannel' to persist the updated date in the database
+userChannelRepository.save(userChannel);
+3. Reset Password Flow in ResetCredentialSF.java:
+Similar to the change password flow, update the "last password update date" when the password is reset.
+Code Snippet for ResetCredentialSF.java (Modify Around Line 71):
+java
+Copy code
+// After resetting the password, update the last password update date
+userChannel.setLastPasswordUpdateDate(LocalDate.now());
+// Save 'userChannel' to persist the updated date in the database
+userChannelRepository.save(userChannel);
+These modifications will implement the required changes for the forget password feature. Make sure to test these changes thoroughly to ensure they work as expected in all relevant scenarios. ​​
+
+
+
+
+
+
+You said:
+Can you give me mermaid diagram for the solution?
+ChatGPT said:
+ChatGPT
+Here's a Mermaid diagram representing the solution for the password expiry check and update flow:
+
+mermaid
+Copy code
+sequenceDiagram
+    participant User as User
+    participant Frontend as Internet Banking (IB)
+    participant Backend as Backend Server
+    participant DB as Database
+
+    User->>Frontend: Attempt to Login
+    Frontend->>Backend: Send Login Request (Username, Password)
+    Backend->>DB: Retrieve User's Last Password Update Date
+    DB-->>Backend: Return Last Password Update Date
+    Backend->>Backend: Calculate Expiry Date (Last Update + 90 days)
+    
+    alt Password Expired
+        Backend->>Frontend: Set Flag: Password Change Required
+        Frontend->>User: Redirect to Change Password Screen
+        User->>Frontend: Enter New Password
+        Frontend->>Backend: Send Change Password Request
+        Backend->>DB: Update Password and Set Last Password Update Date = Current Date
+        Backend->>Frontend: Password Change Successful
+    else Password Not Expired
+        Backend->>Frontend: Set Flag: Password Change Not Required
+        Frontend->>User: Proceed to Home Screen
+    end
+
+    User->>Frontend: Initiate Forgot Password (Reset)
+    Frontend->>Backend: Send Reset Password Request
+    Backend->>DB: Reset Password and Set Last Password Update Date = Current Date
+    Backend->>Frontend: Password Reset Successful
+    Frontend->>User: Prompt to Login Again
+Explanation:
+The flow starts with the user attempting to log in.
+The backend checks the "last password update date" from the database and calculates if the password has expired (90 days).
+If expired, the backend sets a flag for the frontend to redirect the user to the change password screen.
+After the user successfully changes or resets the password, the backend updates the "last password update date" in the database.
+
+
 Component	Class	Existing/New	Method(s) Impacted/Added	Description of Impact	Class Responsibilities
 Transfer Execution	FundTransferSF	Existing	executeTransfer	Modified to call notifyPaymentSuccess for WITHIN_UAE_FUNDS_TRANSFER and WITHIN_BANK_FUNDS_TRANSFER.	Handles the main logic for executing various types of fund transfers. Manages notifications for successful transfers.
 Existing	notifyPaymentSuccess	Updated to handle PDF generation (via TransferPdfHelper), encryption (via PdfHelper), and call the new processNotificationWithAttachment in NotificationServiceSF.	Coordinates the creation and dispatch of success notifications for transfer processes.
