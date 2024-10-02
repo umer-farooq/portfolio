@@ -16,7 +16,38 @@ Add the logic to check country-specific rules for Swift and routing codes.
 Modify the code to ensure that only the correct code is retained before the transfer request is processed, thereby aligning the SI and non-SI transfer handling.
 
 
+/**
+ * Overrides Swift or Routing Code based on country-specific routing rules.
+ * 
+ * @param siDetails The SI details containing beneficiary information.
+ * @param beneficiary The beneficiary details.
+ */
+private void overrideSwiftOrRoutingCode(SIDetails siDetails, Beneficiary beneficiary) {
+    // Fetch routing rules based on the country
+    List<RoutingRule> routingRules = staticDataRepository.getRoutingRulesByCountry(beneficiary.getCountry().getShortCode());
 
+    if (Objects.nonNull(routingRules) && !routingRules.isEmpty()) {
+        for (RoutingRule routingRule : routingRules) {
+            // Both Swift and Routing Code mandatory
+            if (routingRule.getSwiftMandatory() && routingRule.getRoutingCodeMandatory()) {
+                if (StringUtils.isNotBlank(beneficiary.getRoutingCode())) {
+                    // Swift code should not flow if routing code is available
+                    beneficiary.setSwiftCode(StringUtils.EMPTY);
+                }
+            } 
+            // Only Swift Code is mandatory
+            else if (routingRule.getSwiftMandatory() && StringUtils.isNotBlank(beneficiary.getSwiftCode())) {
+                // Routing code should not flow if Swift code is available
+                beneficiary.setRoutingCode(StringUtils.EMPTY);
+            } 
+            // Only Routing Code is mandatory
+            else if (routingRule.getRoutingCodeMandatory() && StringUtils.isNotBlank(beneficiary.getRoutingCode())) {
+                // Swift code should not flow if routing code is available
+                beneficiary.setSwiftCode(StringUtils.EMPTY);
+            }
+        }
+    }
+}
 
 
 You said:
