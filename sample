@@ -1,3 +1,103 @@
+Problem Statement
+The current system for processing international fund transfers has a bug when dealing with beneficiaries that have both Swift and routing codes, particularly for certain regions (e.g., Jordan). The system expects specific handling of these codes based on country-specific rules, but inconsistencies between SI (Standing Instructions) and non-SI transfers are leading to errors in the T24 system.
+
+Root Cause:
+
+For some countries (e.g., Jordan), there are no clear rules in the routing logic table, leading to issues in processing fund transfers.
+The current implementation does not handle scenarios where both Swift and routing codes are provided, resulting in incorrect tags being sent to the T24 system (e.g., 57A instead of 57B).
+SI and non-SI processes reference different logic and tables, leading to discrepancies.
+Expected Fix:
+
+Implement logic that overrides Swift or routing codes based on country-specific rules, ensuring that only the correct code is processed.
+Incorporate this logic into the current fund transfer request preparation process to prevent the issue from recurring. The new method overrideSwiftOrRoutingCode should be called within the codebase to validate and modify beneficiary data as per the routing rules.
+Objective:
+
+Add the logic to check country-specific rules for Swift and routing codes.
+Modify the code to ensure that only the correct code is retained before the transfer request is processed, thereby aligning the SI and non-SI transfer handling.
+
+
+
+
+
+You said:
+Impact Analysis
+ChatGPT said:
+ChatGPT
+Impact Analysis
+Incorporating the new method (overrideSwiftOrRoutingCode) into the existing codebase will address the inconsistency in handling Swift and routing codes, particularly for regions like Jordan. Here’s a detailed analysis of the potential impacts:
+
+1. Functional Impact
+Improved Transfer Processing: The logic will ensure that international fund transfers, both SI (Standing Instructions) and non-SI, use the correct Swift or routing code based on the country-specific rules. This will prevent the T24 system from receiving incorrect data tags (e.g., sending 57A instead of 57B), leading to smoother fund transfer processes.
+Consistent Behavior: The implementation will bring consistency between SI and non-SI transfers by using the same set of rules for handling Swift and routing codes. It ensures that the system behaves uniformly for all types of transfers.
+Reduction in Transfer Failures: By preventing the transmission of incorrect or conflicting data, the changes will likely reduce the number of failed or delayed international transfers, enhancing user experience and confidence in the system.
+2. Code Changes
+New Method Introduction: A new method (overrideSwiftOrRoutingCode) will be added to SIUtility.java. This method will apply the logic to override Swift and routing codes based on predefined routing rules fetched from the database.
+Modification of Existing Method: The prepareFundsTransferReq method in SIUtility.java will be modified to call this new method before processing the transfer request. This ensures that beneficiary data is validated and modified as needed before sending the transfer request.
+3. Data and Configuration Impact
+Dependency on Routing Rules Data: The effectiveness of the new method heavily depends on the data present in the routing rules table in the database (staticDataRepository). If the data is outdated, incomplete, or incorrect, the method may not function as expected. A review and potential update of this data might be required to ensure the new logic works correctly.
+Country-Specific Handling: Any changes to the list of countries or the rules (e.g., mandatory Swift or routing codes) will require updating the routing rules in the database, adding a maintenance overhead to keep the rules in sync with real-world banking requirements.
+4. System and Performance Impact
+Additional Database Calls: The new method introduces a call to fetch routing rules from the staticDataRepository for each transfer. This could have a minor impact on system performance, especially during high transaction volumes, depending on the database's efficiency in retrieving these records.
+Testing Requirements: Extensive testing is needed to verify that the new method handles all scenarios (both SI and non-SI transfers) and works for various country configurations. Testing will include:
+Verifying transfers for countries with both Swift and routing codes.
+Ensuring the correct tags (57A/57B) are sent to the T24 system based on the updated logic.
+Backward Compatibility: Since this change introduces new logic for code validation and modification, ensure that existing functionality is not disrupted. It is crucial to test that transfers that worked fine before the change continue to operate as expected.
+5. Risks
+Incorrect Routing Rule Data: If the country-specific routing rules in the database are not correctly configured, there’s a risk of data inconsistency leading to failed transfers.
+Logic Misapplication: If the new logic is incorrectly applied in scenarios it was not meant for (e.g., countries not requiring any overrides), it might introduce new issues in the transfer process.
+Summary
+The introduction of the overrideSwiftOrRoutingCode method is a critical enhancement that addresses inconsistencies in processing Swift and routing codes for international transfers. While this change promises to improve transfer accuracy and consistency, it comes with dependencies on routing rules data integrity and requires comprehensive testing to mitigate any potential negative impacts on existing transfer flows.
+
+
+
+
+
+
+You said:
+Acceptance criteria
+ChatGPT said:
+ChatGPT
+Acceptance Criteria
+To ensure that the new logic for overriding Swift and routing codes is correctly implemented and fully functional, the following criteria must be met:
+
+Swift and Routing Code Handling:
+
+The system should override Swift or routing codes based on country-specific rules retrieved from the staticDataRepository.
+If both Swift and routing codes are mandatory for a country and a routing code is present, the system must clear the Swift code from the transfer request.
+If only the Swift code is mandatory for a country and the Swift code is provided, the system must clear the routing code.
+If only the routing code is mandatory for a country and the routing code is provided, the system must clear the Swift code.
+Integration of the New Logic:
+
+The overrideSwiftOrRoutingCode method must be called within the prepareFundsTransferReq method (or similar locations) to ensure the logic is applied before processing any fund transfer request.
+The new logic should be executed for both SI (Standing Instructions) and non-SI international transfers.
+Data Integrity and Validation:
+
+The system should correctly fetch routing rules from the database (staticDataRepository) for the beneficiary's country.
+If the country-specific routing rules do not exist in the database, the system should log a clear error message and handle the scenario gracefully.
+Testing Scenarios:
+
+Scenario 1: When a beneficiary has both Swift and routing codes, and the country rules indicate that only the routing code is mandatory, the system must remove the Swift code from the transfer request.
+Scenario 2: When a beneficiary has both Swift and routing codes, and the country rules indicate that only the Swift code is mandatory, the system must remove the routing code from the transfer request.
+Scenario 3: When a beneficiary has only the mandatory code (either Swift or routing), the system must leave the code unchanged and proceed with the transfer.
+Scenario 4: When the country-specific rules specify that both codes are mandatory, the system must retain only the routing code if it is present.
+Edge Case: When no routing rules are defined for a country, the system should log an appropriate message and avoid altering the Swift or routing code.
+Logging and Error Handling:
+
+The system must log the applied routing rules and any changes to Swift or routing codes for debugging and audit purposes.
+Clear error messages should be logged if the routing rules cannot be retrieved or if an unexpected scenario occurs.
+Backward Compatibility:
+
+The updated logic must not affect other functionalities related to fund transfers that do not require routing or Swift code overrides.
+Existing successful transfers (both SI and non-SI) should continue to operate without regression errors after the new logic is implemented.
+Performance:
+
+The integration of overrideSwiftOrRoutingCode should not introduce significant latency in processing fund transfer requests.
+The additional database call to fetch routing rules must be optimized to handle high transaction volumes efficiently.
+Compliance:
+
+The resulting transfer requests must comply with the correct formatting (57A/57B tags) as expected by the T24 system to ensure smooth processing of international transfers.
+By meeting these acceptance criteria, the update will ensure that Swift and routing codes are correctly handled, minimizing the risk of transfer failures and improving system consistency.
+
 In the current implementation of SIUtility.java, a method that prepares or validates a fund transfer request would be the ideal place to incorporate this new method. From the earlier exploration of SIUtility.java, a candidate method is:
 
 Method to Call the New Method
