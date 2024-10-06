@@ -1,0 +1,266 @@
+public abstract class SmartPdfGenerator<T extends PdfRequest> {
+    
+    protected GenerateDocumentHelper generateDocumentHelper;
+
+    public SmartPdfGenerator(GenerateDocumentHelper generateDocumentHelper) {
+        this.generateDocumentHelper = generateDocumentHelper;
+    }
+
+    public PdfDocAttachment generatePdf(T request, SessionInfo sessionInfo) {
+        DocumentRequest documentRequest = buildDocumentRequest(request);
+        PdfDocAttachment response = null;
+
+        try {
+            String result = generateDocumentHelper.generateDocument(documentRequest, sessionInfo.getEnvironment());
+            if (Objects.nonNull(result)) {
+                log.info("Document Service generateDocument API returned with response: {}", result);
+                response = JsonUtils.convertToObject(PdfDocAttachment.class, result);
+            }
+        } catch (Exception e) {
+            log.error("Document Service generateDocument failed with exception: {}", e);
+        }
+
+        return response;
+    }
+
+    protected abstract DocumentRequest buildDocumentRequest(T request);
+}
+
+
+------------------------
+public class TransferPdfGenerator extends SmartPdfGenerator<TransferAdviceRequest> {
+
+
+    public TransferPdfGenerator(GenerateDocumentHelper generateDocumentHelper) {
+        super(generateDocumentHelper);
+    }
+
+    @Override
+    protected DocumentRequest buildDocumentRequest(TransferAdviceRequest request) {
+        DocumentRequest documentRequest = new DocumentRequest();
+        Amount requestAmount = TextUtils.INSTANCE.formatAmount(request.getAmount(), request.getTransferCurrency());
+
+        documentRequest.setContentItemExchange(getContentItemExchange(request));
+        documentRequest.setDataFields(mapDataFields(request, requestAmount));
+
+        documentRequest.setFileName(getFileName(request.getFundTransferType()));
+        documentRequest.setDocumentGeneratedFor(request.getDocumentGeneratedFor());
+        documentRequest.setDocumentGeneratedDate(request.getDocumentGeneratedDate());
+
+        return documentRequest;
+    }
+
+    private String getFileName(FundTransferTypes transferType) {
+        return transferType == FundTransferTypes.WITHIN_BANK_FUNDS_TRANSFER 
+               ? WITHIN_FAB_TRANSFER_ADVICE_FILE_NAME 
+               : WITHIN_UAE_TRANSFER_ADVICE_FILE_NAME;
+    }
+}
+
+
+------------------------------------
+public ContentItemExchange getContentItemExchange(TransferAdviceRequest request) {
+    ContentItemExchange contentItemExchange = new ContentItemExchange();
+    ContentItemModel contentItem = new ContentItemModel();
+
+    switch (request.getFundTransferType()) {
+        case WITHIN_BANK_FUNDS_TRANSFER:
+            contentItem.setContentIdStr("WITHIN_FAB_TRANSFER_ADVICE");
+            break;
+        case WITHIN_UAE_FUNDS_TRANSFER:
+            contentItem.setContentIdStr("WITHIN_UAE_TRANSFER_ADVICE");
+            break;
+        default:
+            contentItem.setContentIdStr("");
+            break;
+    }
+    contentItem.setContentGroup(ContentGroup.TNC.name());
+    contentItem.setLanguage(Language.EN.name());
+    contentItem.setContentType(DocumentContentTypes.PDF.name());
+    contentItemExchange.setContentItems(Collections.singletonList(contentItem));
+
+    return contentItemExchange;
+}
+
+---------------------------------------------
+public Map<String, String> mapDataFields(TransferAdviceRequest request, Amount requestAmount) {
+    Map<String, String> fieldMap = new HashMap<>();
+    fieldMap.put("P1_1", requestAmount.getCurrency() + " " + requestAmount.getValueFmt());
+    fieldMap.put("P1_2", getCharge(request));
+    fieldMap.put("P1_3", request.getTransferDate());
+    fieldMap.put("P1_4", request.getTransferDescription());
+    fieldMap.put("P1_7", getSourceAccOrCard(request));
+    fieldMap.put("P1_10", getBeneficiaryAccOrCard(request));
+    fieldMap.put("P1_11", getLimitedChar(request.getBeneficiaryName()));
+
+    return fieldMap;
+}
+
+-----------------------------------------------
+    public String getFileName(FundTransferTypes transferType) {
+        switch (transferType) {
+            case WITHIN_BANK_FUNDS_TRANSFER:
+                return "WITHIN_FAB_TRANSFER_ADVICE_FILE_NAME";
+            case WITHIN_UAE_FUNDS_TRANSFER:
+                return "WITHIN_UAE_TRANSFER_ADVICE_FILE_NAME";
+            default:
+                return "";
+        }
+    }
+}
+
+--------------------------------
+Add jsonignore in each new model
+Model
+public abstract class PdfRequest {
+    private String documentGeneratedFor;
+    private Date documentGeneratedDate;
+
+    // Getters and Setters
+}
+
+------------------------
+public class TransferAdviceRequest extends PdfRequest {
+    private String sourceProductRef;
+    private ProductTypes sourceProductType;
+    private String receiverProductType;
+    private String receiverProductRef;
+    private String transferCurrency;
+    private Double amount;
+    private FundTransferTypes fundTransferType;
+    private Beneficiary beneficiary;
+    // add other fields
+	
+--------------------------
+public abstract class PdfRequest {
+    private String documentGeneratedFor;
+    private Date documentGeneratedDate;
+
+    // Getters and Setters
+}
+-------------------------
+public class PdfDocAttachment implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+    private String fileContent;
+    private DocumentContentTypes documentType;
+    private String fileName;
+
+    // Getters and Setters
+}
+	
+	
+----------------------------
+Notification
+public void processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters) {
+    processNotification(contentID, sessionInfo, parameters, null);
+}
+
+public void processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters, PdfDocAttachment pdfAttachment) {
+    try {
+        User user = sessionInfo.getUser();
+        if (Objects.isNull(user) || Objects.isNull(contentID)) {
+            log.warn("Notification not sent as User or ContentID is null. Params: {}", parameters);
+            return;
+        }
+
+        String language = resolveLanguage(user.getPreferredLanguage(), sessionInfo);
+        String channelName = resolveChannelName(sessionInfo);
+
+        if (pdfAttachment != null) {
+            notifyByEmailWithAttachment(contentID, user, language, channelName, parameters, pdfAttachment);
+        } else {
+            notifyByEmail(contentID, user, language, channelName, parameters);
+        }
+
+        // Additional handling for SMS or Digital notifications can be added here
+    } catch (Exception e) {
+        log.error("Exception while processing notification for: {}. Cause: {}", contentID, e);
+    }
+}
+-------------------------------
+private void notifyByEmailWithAttachment(ContentID contentID, User user, String language, String channelName,
+                                         Map<String, Object> parameters, PdfDocAttachment pdfAttachment) {
+    ContentItem contentItem = getContentItem(contentID, NotificationType.EMAIL, language, channelName);
+    if (Objects.nonNull(contentItem)) {
+        final String emailBody = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+        final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), parameters);
+        String base64Bin = pdfHelper.getPasswordProtectedPDF(pdfAttachment.getFileContent(), pdfAttachment.getEncryptionKey());
+        final String fileName = pdfAttachment.getFileName().concat(".").concat(pdfAttachment.getDocumentType().getDbShortCode().toLowerCase());
+
+        sendEmailWithAttachment(user.getEmail(), base64Bin, emailSubject, fileName, pdfAttachment.getDocumentType().getContentType(), emailBody);
+    } else {
+        log.error("Content_Item is not configured for: {}, notification: {}, language: {}, channel: {}", contentID, NotificationType.EMAIL, language, channelName);
+    }
+}
+
+------------------------------
+Fund Transfer SF
+private void notifyPaymentSuccess(final ExecuteTransferRequest transferRequest, ExecutePaymentResponse paymentResponse, SessionInfo sessionInfo) {
+    log.info("Invoked notifyPaymentSuccess for fundTransferType = {}", transferRequest.getFundTransferType());
+
+    // Initialize the default content ID
+    ContentID contentTransfer = ContentID.getSuccessContentId(transferRequest.getFundTransferType().name(), BLANK, SUCCESS);
+
+    // Prepare message arguments using the ParameterBuilder utility
+    final Amount requestAmount = TextUtils.INSTANCE.formatAmount(transferRequest.getAmount(), transferRequest.getTransferCurrency());
+    Map<String, Object> messageArgs = ParameterBuilder.buildParametersForContent(transferRequest, paymentResponse, requestAmount);
+
+    // Determine if transfer advice should be sent
+    boolean isTransferAdviceSend = shouldSendTransferAdvice(transferRequest);
+
+    // Generate PDF attachment if needed
+    PdfDocAttachment pdfAttachment = null;
+    if (isTransferAdviceSend) {
+        String encryptionKey = transferAdvicePdfGenerator.buildEncryptionKey(sessionInfo.getUser());
+        pdfAttachment = transferAdvicePdfGenerator.generateDocument(new TransferAdviceRequest(transferRequest), sessionInfo, encryptionKey);
+
+        // Override the content ID if the PDF attachment generation is successful
+        if (pdfAttachment != null && pdfAttachment.getFileContent() != null) {
+            contentTransfer = getContentForTransferAdvice(contentTransfer);
+        }
+    }
+
+    // Pass the pdfAttachment (could be null) to NotificationService
+    notificationService.processNotification(contentTransfer, sessionInfo, messageArgs, pdfAttachment);
+}
+
+
+--------------------------------
+private boolean shouldSendTransferAdvice(ExecuteTransferRequest transferRequest) {
+    return transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_BANK_FUNDS_TRANSFER ||
+           (transferRequest.getFundTransferType() == FundTransferTypes.WITHIN_UAE_FUNDS_TRANSFER &&
+           (transferRequest.isIPPRequest() || transferRequest.isIPIRequest() || transferRequest.getSourceProductType().compareTo(ProductTypes.ACCOUNT) != 0));
+}
+
+--------------------------------
+private ContentID getContentForTransferAdvice(ContentID originalContentID) {
+    // Append "_ATTACHMENT" to the original ContentID name
+    String contentIdName = originalContentID.name() + "_ATTACHMENT";
+    
+    try {
+        return ContentID.valueOf(contentIdName);
+    } catch (IllegalArgumentException e) {
+        log.warn("ContentID not found for: {}", contentIdName);
+        return originalContentID; // Fallback to the original content ID if the new one doesn't exist
+    }
+}
+-------------------------------
+
+
+    public Map<String, Object> buildParametersForContent(ExecuteTransferRequest transferRequest, ExecutePaymentResponse paymentResponse, Amount requestAmount) {
+        Map<String, Object> messageArgs = new HashMap<>();
+        
+        // Populate common parameters
+        messageArgs.put("txnAmountFmt", requestAmount.getValueFmt());
+        messageArgs.put("transferCurrency", requestAmount.getCurrency());
+        messageArgs.put("txnDesc", transferRequest.getFundTransferType().getTransferDesc());
+
+        // Additional logic based on transfer type
+        // For example, setting the beneficiary details, source account details, etc.
+
+        return messageArgs;
+    }
+}
+
+	
