@@ -1,3 +1,1030 @@
+processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters) {
+public void processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters) {
+		try {
+			User user = sessionInfo.getUser();
+			log.info("User: "+user);
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+
+			String language = user.getPreferredLanguage();
+			log.info("Language: "+language);
+			language = this.resolveLanguage(language, sessionInfo);
+
+			ChannelType channelType = sessionInfo.getChannelType();
+			log.info("ChannelType: "+channelType);
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.BROWSER;
+			}
+			
+			log.info("Parameters: "+parameters);
+
+			if(Objects.nonNull(parameters)){
+				parameters.put("sendDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null,DATE_DDMMYYYYHHMM));
+				
+				if (!((staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, LOCAL_CONTACT_CENTER_PHONE_ISL).getDescription()).equals(parameters.get("localContactCenterPhone"))))
+				{
+					parameters.put("localContactCenterPhone", staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, LOCAL_CONTACT_CENTER_PHONE).getDescription()); //"600525500"
+				}
+				if (!((staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, GLOBAL_CONTACT_CENTER_PHONE_ISL).getDescription()).equals(parameters.get("globalContactCenterPhone"))))
+				{
+					parameters.put("globalContactCenterPhone", staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, GLOBAL_CONTACT_CENTER_PHONE).getDescription()); //"+97126811511"
+				}
+				parameters.put("contactCenterEmail",  staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, CONTACT_CENTER_EMAIL).getDescription()); //"atyourservice@bankfab.com"
+				parameters.put("channelName",channelType.equals(ChannelType.BROWSER)?"Online":"Mobile");
+
+			}
+
+			final String channelName = channelType.name().toUpperCase();
+			
+			//Replace with Debug
+			log.info("Preparing notification for language:{}, channel:{}, contentID:{} for CIF:{}", language, channelName, contentID, user.getCif());
+			
+			
+			if(user.getOtpState() == OTPState.EMAIL){
+				this.notifyByEmail(contentID, user, language, channelName, parameters);
+			} else if(user.getOtpState() == OTPState.SMS){
+				this.notifyBySms(contentID, user, language, channelName, parameters);
+			} else {
+				this.notifyByEmail(contentID, user, language, channelName, parameters);
+				this.notifyBySms(contentID, user, language, channelName, parameters);
+				this.notifyByDigitalNotifications(contentID, user, language, channelName, parameters);
+			}
+			
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentID, e);
+		}
+	}
+	
+	public void processNotificationByUserConfigPref(ContentID contentID,SessionInfo sessionInfo, Map<String, Object> parameters) {
+		try {
+			User user = sessionInfo.getUser();
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+	
+			String language = user.getPreferredLanguage();
+			language = this.resolveLanguage(language, sessionInfo);
+			final String cif = user.getCif();
+	
+			ChannelType channelType = sessionInfo.getChannelType();
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+
+			if (channelType == null) {
+				channelType = ChannelType.BROWSER;
+			}
+			if(Objects.nonNull(parameters)){
+				parameters.put("sendDateTime", DateTimeHelper.INSTANCE.getCurrentDateForMessage(null,DATE_DDMMYYYYHHMM));
+				parameters.put("localContactCenterPhone", staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, LOCAL_CONTACT_CENTER_PHONE).getDescription()); //"600525500"
+				parameters.put("globalContactCenterPhone", staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, GLOBAL_CONTACT_CENTER_PHONE).getDescription()); //"+97126811511"
+				parameters.put("contactCenterEmail",  staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, CONTACT_CENTER_EMAIL).getDescription()); //"atyourservice@bankfab.com"
+				parameters.put("channelName",channelType.equals(ChannelType.BROWSER)?"Online":"Mobile");
+			}
+			
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} for CIF:{}", language, channelName, contentID, user.getCif());
+	
+			if (StringUtils.isNotBlank(cif)) {				
+				// Check user preferences for EMAIL notification
+				if (Boolean.valueOf(preferenceRepository.userConfigEnabled(cif, contentID.name(), CONFIG_EMAIL))) {
+					notifyByEmail(contentID, user, language, channelName, parameters);
+				}
+				// Check user preferences for SMS notification
+				if (Boolean.valueOf(preferenceRepository.userConfigEnabled(cif, contentID.name(), CONFIG_SMS))) {
+					notifyBySms(contentID, user, language, channelName, parameters);
+				}		
+				this.notifyByDigitalNotifications(contentID, user, language, channelName, parameters);
+			}
+		} catch (Exception e) {
+			log.error("Exception while processing alert notification (processNotificationByUserConfigPref) for:{}. Cause:{}", contentID, e);
+		}
+	}
+	
+	/**
+	 * Notification using preferences
+	 * 
+	 * @param contentID
+	 * @param sessionInfo
+	 * @param notificationPref
+	 * @param parameters
+	 */
+	public void processNotification(ContentID contentID, User user, NotificationType notificationPref, Map<String, Object> parameters) {
+		try {
+			
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+
+			if(StringUtils.isBlank(user.getPreferredLanguage())) {
+				user.setPreferredLanguage("EN");
+			}
+			log.info("Language: "+user.getPreferredLanguage());
+
+
+			ChannelType channelType = ChannelType.MOBILE;
+			log.info("ChannelType: "+channelType);
+
+
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} ", user.getPreferredLanguage(), channelName, contentID);
+			
+			if(Objects.nonNull(notificationPref)) {
+				if(notificationPref.equals(NotificationType.SMS)) {
+					this.notifyBySms(contentID, user, user.getPreferredLanguage(), channelName, parameters);
+				} else if(notificationPref.equals(NotificationType.EMAIL)) {
+					this.notifyByEmail(contentID, user, user.getPreferredLanguage(), channelName, parameters);
+				}  else if(notificationPref.equals(NotificationType.DIGITAL)) {
+					this.notifyByDigitalNotifications(contentID, user, user.getPreferredLanguage(), channelName, parameters);
+				}
+			}
+			
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentID, e);
+		}
+	}
+
+	
+	private void notifyBySms(ContentID contentID, User user, String language, String channelName, Map<String, Object> parameters) {
+		if(smsPreferenceValidation(user.getCif(), contentID.name())) {
+			ContentItem contentItem = this.getContentItem(contentID, NotificationType.SMS, language, channelName);
+			
+			log.info("ContentItem: "+contentItem);
+
+		if (Objects.nonNull(contentItem)) {
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+			//if(!contentItem.getPath().contains("OTP")) {
+				log.info("notifyBySms: CIF:{}, Generated SMS Text:{}", user.getCif(), msg);
+			//}
+			this.sendSms(user.getMobileNo(), msg, contentItem.getAlertId());
+			if (ContentID.CUSTOMER_ONBOARD_NTB_OTP.equals(contentID) || ContentID.CUSTOMER_ONBOARD_NTB_SMS_OTP.equals(contentID)) {
+				pushOtpEventToAnalytics(contentID, user, "sms otp ");
+			}
+		} else {
+			log.error("**WARNING** Content_Item is not configured for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.SMS, language, channelName);
+			}
+		}else {
+			log.info("SMS- User preference didn't match with SMS delivery");
+		}
+	}
+
+	private void notifyBySms(ContentID contentID, User user, String language, String channelName, String... parameters) {
+		if(smsPreferenceValidation(user.getCif(), contentID.name())) {
+			ContentItem contentItem = this.getContentItem(contentID, NotificationType.SMS, language, channelName);
+
+			if (Objects.nonNull(contentItem)) {
+				final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+				if(!contentItem.getPath().contains("OTP")) {
+					log.info("notifyBySms: CIF:{}, Generated SMS Text:{}", user.getCif(), msg);
+				}
+				this.sendSms(user.getMobileNo(), msg, contentItem.getAlertId());
+			} else {
+				log.error("Content_Item is not configured in database for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, language, channelName);
+			}
+		}else {
+			log.info("SMS- User preference didn't match");
+		}
+	}
+
+	private void sendSms(final String mobileNo, final String smsText, final String alertId, final String... parameters) {
+		
+		log.info("Inside sendSMS");
+		SmsRequest request = new SmsRequest();
+		if (StringUtils.isBlank(mobileNo))
+			throw new AppException(ErrorCodes.REG_CONTACT_NA);
+		
+		request.setMobileNo(mobileNo);
+		request.setSmsText(smsText);
+		request.setSender(settingsRepository.getEntityName());
+		request.setSourceSystem(PERSONAL_BANKING_API);
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+		request.setAlertId(Objects.nonNull(alertId)?alertId:BLANK);
+	
+		mqNotifier.sendSMS(JsonUtils.convertToJson(request));
+	}
+
+	private void notifyByEmail(ContentID contentID, User user, String language, String channelName, Map<String, Object> parameters) {
+		ContentItem contentItem = this.getContentItem(contentID, NotificationType.EMAIL, language, channelName);
+		boolean nameOtpBody = false;
+		boolean mobileOtpBody = false;
+		
+		if (Objects.nonNull(contentItem)) {
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+			final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), parameters);
+			//if(!contentItem.getPath().contains("OTP")) {
+				log.info("notifyByEmail: CIF:{}, Email subject:{} and Email Text:{}", user.getCif(), emailSubject, msg);
+			//}
+
+			if (DocumentContentTypes.PDF.getDbShortCode().equalsIgnoreCase(contentItem.getDocumentType())) {
+				String encryptionKey = null;
+				if(StringUtils.isBlank(user.getDateOfBirth())) {
+
+					// Change for CASA NFC - Start
+					if(StringUtils.isBlank(user.getName())) {
+						// As name is not present, use pdf password as last 6 digit of mobile no
+						encryptionKey = StringUtils.right(user.getMobileNo(), 6);
+						mobileOtpBody = true;
+						log.debug("CASA NFC :: mobileOtpBody="+mobileOtpBody);
+					} else {
+					// Change for CASA NFC - End
+
+						String name = StringUtils.deleteWhitespace(user.getName());
+						encryptionKey = StringUtils.left(name, 4) + StringUtils.right(user.getMobileNo(), 4);
+						nameOtpBody = true;
+					}
+				} else {
+					encryptionKey = StringUtils.right(user.getMobileNo(), 4) + StringUtils.right(user.getDateOfBirth(), 4);	
+				}
+				
+				final String base64Bin = pdfHelper.createPdf(msg, encryptionKey.toLowerCase(), encryptionKey.toUpperCase(),false);
+				String documentName = StringUtils.isBlank(user.getCif()) ? user.getMobileNo() : user.getCif();
+				// with attachment
+				String fileName = documentName.concat(".").concat(contentItem.getDocumentType());
+				if(ContentID.CUSTOMER_ONBOARD_CASA_ISL_OTP.equals(contentID)) {
+					this.sendEmail(user.getEmail(), base64Bin, emailSubject, fileName, contentItem.getContentType(), true, nameOtpBody, mobileOtpBody);
+				}else {
+					//this.sendEmail(user.getEmail(), msg, emailSubject, null, contentItem.getContentType(), false , false, mobileOtpBody);
+					this.sendEmail(user.getEmail(), base64Bin, emailSubject, fileName, contentItem.getContentType(), true, nameOtpBody, mobileOtpBody);
+				}
+
+				//this.sendEmail(user.getEmail(), base64Bin, emailSubject, fileName, contentItem.getContentType(), true, nameOtpBody, mobileOtpBody);
+			} else {
+				// without attachment
+				if(ContentID.CUSTOMER_ONBOARD_CASA_ISL_OTP.equals(contentID)) {
+					this.sendEmail(user.getEmail(), msg, emailSubject, null, contentItem.getContentType(), false , false,mobileOtpBody,contentID);
+					
+				}else {
+					log.info("Inside SendEmail");
+					this.sendEmail(user.getEmail(), msg, emailSubject, null, contentItem.getContentType(), false , false, mobileOtpBody);
+					if (ContentID.CUSTOMER_ONBOARD_NTB_OTP.equals(contentID)) {
+						pushOtpEventToAnalytics(contentID, user, "email otp ");
+					}
+				}
+				
+			}
+		} else {
+			log.error("**WARNING** Content_Item is not configured for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, language, channelName);
+		}
+	}
+
+	private void notifyByEmail(ContentID contentID,String subjectParameter, User user, String language, String channelName, String... parameters) {
+		ContentItem contentItem = this.getContentItem(contentID, NotificationType.EMAIL, language, channelName);
+				
+		if (Objects.nonNull(contentItem)) {
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+			final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), subjectParameter);
+
+			if(!contentItem.getPath().contains("OTP")) {
+				log.info("notifyByEmail: CIF:{}, subject:{} and Email Text:{}", user.getCif(), emailSubject, msg);
+			}
+
+			if (DocumentContentTypes.PDF.getDbShortCode().equalsIgnoreCase(contentItem.getDocumentType())) {
+				final String encryptionKey = StringUtils.right(user.getMobileNo(), 4) + StringUtils.right(user.getDateOfBirth(), 4);
+				final String base64Bin = pdfHelper.createPdf(msg, encryptionKey, encryptionKey,false);
+
+				// with attachment
+				String fileName = user.getCif().concat(".").concat(contentItem.getDocumentType());
+				this.sendEmail(user.getEmail(), base64Bin, emailSubject, fileName, contentItem.getContentType(), true, false, false);
+			} else {
+				// without attachment
+				this.sendEmail(user.getEmail(), msg, emailSubject, null, contentItem.getContentType(), false, false, false);
+			}
+		} else {
+			log.error("Content_Item is not configured in database for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, language, channelName);
+		}
+	}
+	
+	public void notifyATSByEmailForFAQ(FAQUserDetails userDetails,ContentID contentID,String[] subjectParameter, String language, String channelName,List<TessAttachment> attachments, String... parameters) {
+		boolean mailStatus = false;
+
+		ContentItem contentItem = this.getContentItem(contentID, NotificationType.EMAIL, language, channelName);
+
+		if (Objects.nonNull(contentItem)) {
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+			final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), subjectParameter);
+
+			log.info("notifyByEmail: subject:{} and Email Text:{}", emailSubject, msg);
+
+			mailStatus = this.sendEmailToAtYourService(staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, CONTACT_CENTER_EMAIL).getDescription(),msg, emailSubject,contentItem.getContentType(),attachments);
+
+		} else {
+			log.error("Content_Item is not configured in database for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, language, channelName);
+		}
+
+		ContentItem contentItemUser = this.getContentItem(ContentID.AT_YOUR_SERVICE_USER, NotificationType.EMAIL, language, channelName);
+
+		if (Objects.nonNull(contentItemUser)) {
+			if(StringUtils.isNotBlank(userDetails.getMaskedCin())){
+				parameters[3] = "CIN: "+userDetails.getMaskedCin();
+			}
+			parameters[5] = userDetails.getMobileMasked();
+			parameters[6] = userDetails.getEmailMasked();
+
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItemUser.getContentText(), parameters);
+			final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItemUser.getMetadata(), subjectParameter);
+
+			log.info("notifyByEmail: subject:{} and Email Text:{}", emailSubject, msg);
+			if(mailStatus) {
+				this.sendEmailToAtYourService(userDetails.getEmail(),msg, emailSubject,contentItemUser.getContentType(),new ArrayList<>());
+			}else {
+				log.info("Email to At Your service failed, Hence ignoring user email communication");
+			}
+		} else {
+			log.error("Content_Item is not configured in database for:{}, notification:{}, language:{}, channel:{}", ContentID.AT_YOUR_SERVICE_USER, NotificationType.EMAIL, language, channelName);
+		}
+
+	}
+
+	private void notifyByEmail(ContentID contentID, User user, String language, String channelName, String... parameters) {
+		ContentItem contentItem = this.getContentItem(contentID, NotificationType.EMAIL, language, channelName);
+
+		if (Objects.nonNull(contentItem)) {
+			final String msg = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+			if(!contentItem.getPath().contains("OTP")) {
+				log.info("notifyByEmail: CIF:{}, Generated Email Text:{}", user.getCif(), msg);
+			}
+			
+			//Added for debugging
+			log.info("Inside NotifyByEmail");
+
+			if (DocumentContentTypes.PDF.getDbShortCode().equalsIgnoreCase(contentItem.getDocumentType())) {
+				//final String encryptionKey = TextUtils.INSTANCE.createTextFromTemplate("{0}{1}", StringUtils.right(user.getMobileNo(), 4), StringUtils.right(user.getDateOfBirth(), 4));
+				final String encryptionKey = StringUtils.right(user.getMobileNo(), 4) + StringUtils.right(user.getDateOfBirth(), 4);
+				final String base64Bin = pdfHelper.createPdf(msg, encryptionKey, encryptionKey,false);
+				// with attachment
+				String fileName = user.getCif().concat(".").concat(contentItem.getDocumentType());
+				this.sendEmail(user.getEmail(), base64Bin, contentItem.getMetadata(), fileName, contentItem.getContentType(), true, false, false);
+			} else {
+				// without attachment
+				log.info("Inside SendEmail");
+				this.sendEmail(user.getEmail(), msg, contentItem.getMetadata(), null, contentItem.getContentType(), false, false, false);
+			}
+		} else {
+			log.error("Content_Item is not configured in database for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, language, channelName);
+		}
+	}
+
+	private void sendEmail(final String emailId, final String emailTxt, final String emailSubject, final String emailFileName, 
+			final String mimeType, final boolean attachmentFlag, final boolean nameOtpEmailBody, final boolean mobileOtpBody) {
+		if (StringUtils.isBlank(emailId)) {
+			log.warn("Email processing SKIPPED as no emailid available in system. emailSubject:{}", emailSubject);
+			return;
+		}
+			
+		EmailRequest request = new EmailRequest();
+		request.setFromAddress(settingsRepository.getEmailFromAddress());
+		request.addToAddress(emailId);
+		request.setEntityName(settingsRepository.getEntityName());
+		request.setSourceSystem(settingsRepository.getEntityName());
+		request.setEmailSubject(emailSubject);
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+	
+		if (attachmentFlag) {
+			// SET EMAIL ATTACHMENT
+			EmailAttachment attachment = new EmailAttachment();
+			attachment.setAttachementBytes(emailTxt);
+			attachment.setMimeType(mimeType);
+			attachment.setFileName(emailFileName);
+			request.addEmailAttachment(attachment);
+			log.debug("CASA NFC :: mobileOtpBody={}, envConfig.getMobileOtpEmailBody()={}", mobileOtpBody, envConfig.getMobileOtpEmailBody());
+			if(mobileOtpBody && Objects.nonNull(envConfig.getMobileOtpEmailBody())) {
+				request.setEmailBodyContent(new String(envConfig.getMobileOtpEmailBody()));
+				log.debug("CASA NFC :: request.getEmailBodyContent()={}", request.getEmailBodyContent());
+			} else if(nameOtpEmailBody && Objects.nonNull(envConfig.getNameOtpEmailBody())){
+				request.setEmailBodyContent(new String(envConfig.getNameOtpEmailBody()));
+			} else if(Objects.nonNull(envConfig.getOtpEmailBody())) {
+				request.setEmailBodyContent(new String(envConfig.getOtpEmailBody()));
+			}
+			request.setEmailBodyContentType(TEXT);	
+		} else {
+			request.setEmailBodyContent(emailTxt);
+			request.setEmailBodyContentType(mimeType);
+		}
+		
+		mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+	}
+	
+	private void sendEmail(final String emailId, final String emailTxt, final String emailSubject, final String emailFileName, 
+			final String mimeType, final boolean attachmentFlag, final boolean nameOtpEmailBody, final boolean mobileOtpBody, ContentID contentId) {
+		if (StringUtils.isBlank(emailId)) {
+			log.warn("Email processing SKIPPED as no emailid available in system. emailSubject:{}", emailSubject);
+			return;
+		}
+			
+		EmailRequest request = new EmailRequest();
+		request.setFromAddress(settingsRepository.getEmailFromAddress());
+		request.addToAddress(emailId);
+		request.setEntityName(settingsRepository.getEntityName());
+		request.setSourceSystem(settingsRepository.getEntityName());
+		request.setEmailSubject(emailSubject);
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+	
+		if (attachmentFlag) {
+			// SET EMAIL ATTACHMENT
+			EmailAttachment attachment = new EmailAttachment();
+			attachment.setAttachementBytes(emailTxt);
+			attachment.setMimeType(mimeType);
+			attachment.setFileName(emailFileName);
+			request.addEmailAttachment(attachment);
+			if(ContentID.CUSTOMER_ONBOARD_CASA_ISL_OTP.equals(contentId)) {
+				if(mobileOtpBody && Objects.nonNull(envConfig.getMobileOtpEmailBody())) {
+					request.setEmailBodyContent(new String(envConfig.getMobileOtpEmailBody()));
+				}
+				else if(nameOtpEmailBody && Objects.nonNull(envConfig.getNameOtpEmailBodyCasaIsl())){
+					request.setEmailBodyContent(new String(envConfig.getNameOtpEmailBodyCasaIsl()));
+				} else if(Objects.nonNull(envConfig.getOtpEmailBodyCasaIsl())) {
+					request.setEmailBodyContent(new String(envConfig.getOtpEmailBodyCasaIsl()));
+				}
+			}
+			else {
+				if(mobileOtpBody && Objects.nonNull(envConfig.getMobileOtpEmailBody())) {
+					request.setEmailBodyContent(new String(envConfig.getMobileOtpEmailBody()));
+				}
+				else if(nameOtpEmailBody && Objects.nonNull(envConfig.getNameOtpEmailBody())){
+					request.setEmailBodyContent(new String(envConfig.getNameOtpEmailBody()));
+				} else if(Objects.nonNull(envConfig.getOtpEmailBody())) {
+					request.setEmailBodyContent(new String(envConfig.getOtpEmailBody()));
+				}
+			}
+			request.setEmailBodyContentType(TEXT);	
+		} else {
+			request.setEmailBodyContent(emailTxt);
+			request.setEmailBodyContentType(mimeType);
+		}
+		
+		mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+	}
+
+	private boolean sendEmailToAtYourService(final String toAddress,final String emailTxt, final String emailSubject, final String mimeType, List<TessAttachment> attachments) {
+		
+		boolean mailStatus = false;
+		try {
+			EmailRequest request = new EmailRequest();
+			request.setFromAddress(settingsRepository.getEmailFromAddress());
+			request.addToAddress(toAddress);
+			request.setEntityName(settingsRepository.getEntityName());
+			request.setSourceSystem(settingsRepository.getEntityName());
+			request.setEmailSubject(emailSubject);
+			request.setRequestID(TextUtils.INSTANCE.generateId());
+
+			request.setEmailBodyContent(emailTxt);
+			request.setEmailBodyContentType(mimeType);
+
+			if(Objects.nonNull(attachments) && !attachments.isEmpty()) {
+				for(TessAttachment attach:attachments) {
+					EmailAttachment attachment = new EmailAttachment();
+					attachment.setAttachementBytes(attach.getFileContent());
+					attachment.setMimeType(attach.getFileFormat());
+					attachment.setFileName(attach.getFileName());
+					request.addEmailAttachment(attachment);
+
+				}
+			}
+			log.info(request.toString());
+			mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+			mailStatus = true;
+		}catch(Exception ex) {
+			log.info("Error while creating email request to : {}",toAddress);
+		}
+		log.info("Email status send to {} : {}",toAddress,mailStatus);
+
+		return mailStatus;
+	}
+
+	private String resolveLanguage(String language, SessionInfo sessionInfo) {
+		if(Objects.nonNull(sessionInfo)) {
+			Locale locale = sessionInfo.getLocale();
+			language = locale.getLanguage();
+			if (Objects.isNull(language)) {
+				User user = sessionInfo.getUser();
+				if (Objects.nonNull(user))
+					language = user.getPreferredLanguage();
+			}
+		} 
+		
+		language = StringUtils.isBlank(language) ? AppConstants.LOCALE_EN : StringUtils.left(language, 2);
+		return language;
+	}
+
+	private ContentItem getContentItem(ContentID contentID, NotificationType notificationType, String language, String channelName) {
+		ContentItem contentItem = contentItemRepository.fetchContentByPath(ContentGroup.MSGTEMPLATE.name(), contentID.name(), notificationType.name(), language, channelName);
+	    if(!AppConstants.LOCALE_EN.equalsIgnoreCase(language) && Objects.isNull(contentItem)) {
+	    	contentItem = contentItemRepository.fetchContentByPath(ContentGroup.MSGTEMPLATE.name(), contentID.name(), notificationType.name(), AppConstants.LOCALE_EN, channelName);
+	    }
+
+		return contentItem;
+	}
+	
+	public void sendMutualFundEnquiry(final NotificationRequest notificationRequest) {
+		if (Objects.isNull(notificationRequest))
+			return;
+		EmailRequest request = new EmailRequest();
+		request.setFromAddress(settingsRepository.getEmailFromAddress());
+		request.addToAddress(settingsRepository.getSetting(MUTUAL_FUND_ENQUIRY_EMAIL));
+		request.setEntityName(settingsRepository.getEntityName());
+		request.setSourceSystem(settingsRepository.getEntityName());
+		request.setEmailSubject(notificationRequest.getSubject());
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+		
+		StringBuilder messageBuilder = new StringBuilder();
+		messageBuilder.append(notificationRequest.getMessageText());
+		if(SessionContext.getSession() != null && SessionContext.getSession().getUser() != null) {
+			messageBuilder.append("\n\n From:");
+			messageBuilder.append(SessionContext.getSession().getUser().getName());
+			messageBuilder.append("\n User ID:");
+			messageBuilder.append(SessionContext.getSession().getUser().getCin());
+		}
+		request.setEmailBodyContent(messageBuilder.toString());
+		
+		mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+	}
+
+	@Asynchronous
+	public Future<Boolean>  processNotificationTess(ContentID contentID, SessionInfo sessionInfo, TessAttachment attachement,
+			String fileName, StringBuffer body) {
+		
+		try {
+			User user = sessionInfo.getUser();
+			if (Objects.isNull(attachement) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as content is null.");
+				return new javax.ejb.AsyncResult<Boolean>(false);
+			}
+			
+			ChannelType channelType = sessionInfo.getChannelType();
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.BROWSER;
+			}
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{}", "en", channelName, contentID);
+			
+			this.notifyByEmail(contentID, user, channelName, attachement, fileName, body);
+			
+		} catch (Exception e) {
+			log.error("Exception while processing notification for {}. Cause:{}", contentID, e);
+		}
+		return new javax.ejb.AsyncResult<Boolean>(true);
+	}
+
+	private void notifyByEmail(ContentID contentID, User user, String channelName, TessAttachment attachement, String fileName, StringBuffer body) {
+		
+		ContentItem contentItem = this.getContentItem(contentID, NotificationType.EMAIL, "en", channelName);
+		if (Objects.nonNull(contentItem)) {
+			String subParam = user.getCin()+" "+fileName;
+			final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), subParam);
+			//final String zipFileContent = FABUtils.INSTANCE.generateZip(attachement.getFileName(), attachement.getFileContent());
+			
+			body.append("\n"+ contentItem.getContentText());
+			log.info("notifyByEmailTess: CIF:{}, Generated Email Text:{}", user.getCif(), body.toString());
+			this.sendEmail( attachement.getFileContent(), body.toString(), emailSubject, fileName, attachement.getFileFormat(), true);
+			}
+	}
+
+	private void sendEmail(String zipFileContent, String emailBodyContent, String emailSubject, String emailFileName, String mimeType,
+			boolean attachmentFlag) {
+		
+		EmailRequest request = new EmailRequest();
+		request.setFromAddress(settingsRepository.getEmailFromAddress());
+		request.addToAddress(settingsRepository.getEmailToAddressForTess());
+		List<String> ccList = settingsRepository.getEmailCcAddressForTess();
+		if(Objects.nonNull(ccList) && ccList.size()> 0)
+			request.setCcAddress(ccList);
+		//request.setBccAddress("");
+		request.setEntityName(settingsRepository.getEntityName());
+		request.setSourceSystem(settingsRepository.getEntityName());
+		request.setEmailSubject(emailSubject);
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+	
+		if (attachmentFlag) {
+			// SET EMAIL ATTACHMENT
+			EmailAttachment attachment = new EmailAttachment();
+			attachment.setAttachementBytes(zipFileContent);
+			attachment.setMimeType(mimeType);
+			attachment.setFileName(emailFileName);
+			request.addEmailAttachment(attachment);
+			
+			request.setEmailBodyContent(emailBodyContent);
+			request.setEmailBodyContentType(TEXT);	
+		}
+		
+		mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+	}
+	
+	/*
+	 * This Method is to send notification without getting User deatils from session.
+	 */
+	public void processNotification(ContentID contentID, User user,ChannelType channelType, Map<String, Object> parameters) {
+		try {
+			
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+
+			String language = user.getPreferredLanguage();
+
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.MOBILE;
+			}
+
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} ", language, channelName, contentID);
+			
+			this.notifyByEmail(contentID, user, language, channelName, parameters);
+			this.notifyBySms(contentID, user, language, channelName, parameters);
+			//vccNotificationService.preparePushNotification(contentID, user, language, channelName, parameters);
+			
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentID, e);
+		}
+	}
+	
+	/**
+	 * Notification using preferences
+	 * 
+	 * @param contentID
+	 * @param sessionInfo
+	 * @param notificationPref
+	 * @param parameters
+	 */
+	public void processNotification(ContentID contentID, SessionInfo sessionInfo, NotificationType notificationPref, Map<String, Object> parameters) {
+		try {
+			
+			User user = sessionInfo.getUser();
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+
+			String language = user.getPreferredLanguage();
+			log.info("Language: "+language);
+			language = this.resolveLanguage(language, sessionInfo);
+
+			ChannelType channelType = sessionInfo.getChannelType();
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+			log.info("ChannelType: "+channelType);
+
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.MOBILE;
+			}
+
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} ", language, channelName, contentID);
+			
+			if(Objects.nonNull(notificationPref)) {
+				if(notificationPref.equals(NotificationType.SMS)) {
+					this.notifyBySms(contentID, user, language, channelName, parameters);
+				} else if(notificationPref.equals(NotificationType.EMAIL)) {
+					this.notifyByEmail(contentID, user, language, channelName, parameters);
+				} else if(notificationPref.equals(NotificationType.DIGITAL)) {
+					this.notifyByDigitalNotifications(contentID, user, language, channelName, parameters);
+				}
+			}
+			
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentID, e);
+		}
+	}
+	private boolean smsPreferenceValidation(String cif, String eventType){
+		boolean validation = true;
+		List<NotificationConfig> notificationConfigs = notificationCentreRepository.getNotificationDetailByDeliveryChannel("SMS");
+		if(Objects.nonNull(notificationConfigs) && notificationConfigs.size()>0) {
+			NotificationConfig eventConfig = notificationConfigs.stream().filter(config->config.getEventType().equals(eventType)).findFirst().orElse(null);
+			if(Objects.nonNull(eventConfig) && StringUtils.isNotBlank(eventConfig.getCatagoryId())) {
+				validation = "Y".equals(eventConfig.getIsEnabled())?true:false;
+				if(validation) {
+					validation = notificationCentreSF.getUserNotificationPreferenceByDeliveryChannel(eventConfig.getCatagoryId(), cif, "SMS");
+				}else {
+					log.info("SMS is disabled in Notification_config for eventType:{}",eventType);
+				}
+			}
+		}
+		return validation;
+	}
+	
+	public void processNotificationForIpo(ContentID contentID, SessionInfo sessionInfo, String mobileNo,
+			Map<String, Object> parameters) {
+		log.info("inside send notification for IPO");
+		try {
+			User user = sessionInfo.getUser();
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+
+			String language = user.getPreferredLanguage();
+			language = this.resolveLanguage(language, sessionInfo);
+
+			ChannelType channelType = sessionInfo.getChannelType();
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.BROWSER;
+			}
+
+			if (Objects.nonNull(parameters)) {
+				parameters.put("sendDateTime",
+						DateTimeHelper.INSTANCE.getCurrentDateForMessage(null, DATE_DDMMYYYYHHMM));
+
+				if (!((staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, LOCAL_CONTACT_CENTER_PHONE_ISL)
+						.getDescription()).equals(parameters.get("localContactCenterPhone")))) {
+					parameters.put("localContactCenterPhone", staticDataRepository
+							.fetchStaticData_EN(FAB_CONTACT_US, LOCAL_CONTACT_CENTER_PHONE).getDescription()); // "600525500"
+				}
+				if (!((staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, GLOBAL_CONTACT_CENTER_PHONE_ISL)
+						.getDescription()).equals(parameters.get("globalContactCenterPhone")))) {
+					parameters.put("globalContactCenterPhone", staticDataRepository
+							.fetchStaticData_EN(FAB_CONTACT_US, GLOBAL_CONTACT_CENTER_PHONE).getDescription()); // "+97126811511"
+				}
+				parameters.put("contactCenterEmail",
+						staticDataRepository.fetchStaticData_EN(FAB_CONTACT_US, CONTACT_CENTER_EMAIL).getDescription()); // "atyourservice@bankfab.com"
+				parameters.put("channelName", channelType.equals(ChannelType.BROWSER) ? "Online" : "Mobile");
+
+			}
+
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} for CIF:{}", language,
+					channelName, contentID, user.getCif());
+			user.setMobileNo(mobileNo);
+			this.notifyBySms(contentID, user, language, channelName, parameters);
+
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentID, e);
+		}
+	}
+	
+	/**
+	 * Push OTP event to analytics
+	 * 
+	 * @param contentID
+	 * @param user
+	 * @param otpEventComment
+	 */
+	private void pushOtpEventToAnalytics(ContentID contentID, User user, String otpEventComment) {
+		log.info("In pushOtpEventToAnalytics");
+		if (Objects.nonNull(user) && StringUtils.isNotBlank(user.getReferenceId())) {
+			User userInfo = (User) cacheHelper.getFromUserDataCache(user.getReferenceId() + AppConstants.OTP_EVENT);
+			OnboardAnalyticEventType eventType = null;
+			DocumentScanJourneyFlow journey = null;
+			if (Objects.nonNull(userInfo) && StringUtils.isNotBlank(userInfo.getInitiationType())) {
+				log.info("notify resent userInfo:{}", user.getOtpState());
+				otpEventComment = otpEventComment + "resent.";
+				eventType = OnboardAnalyticEventType.OTP_RESENT;
+				journey = DocumentScanJourneyFlow.valueOf(userInfo.getInitiationType());
+			} else {
+				if (StringUtils.isNotBlank(user.getInitiationType())) {
+					log.info("notify sent userInfo:{}", user.getOtpState());
+					otpEventComment = otpEventComment + "sent.";
+					eventType = OnboardAnalyticEventType.OTP_SENT;
+					journey = DocumentScanJourneyFlow.valueOf(user.getInitiationType());
+					// Adding data to cache for verify otp stage
+					if (otpEventComment.equalsIgnoreCase("sms otp sent.")) {
+						cacheHelper.addToUserDataCache(user.getReferenceId() + AppConstants.OTP_EVENT, user);
+					}
+				}
+			}
+			HashMap<String, String> keyVals = new HashMap<>();
+			keyVals.put(OnboardingAnalyticHelper.OTP_COMMENTS, otpEventComment);
+			analyticHelper.publishOTPEvent(eventType, user.getReferenceId(), journey, keyVals);
+		}
+	}
+
+	public void processSMSNotification(ContentID contentId, SessionInfo sessionInfo, Map<String, Object> msgArgs) {
+
+		log.info("inside send notification for IPO");
+		try {
+			User user = sessionInfo.getUser();
+			if (Objects.isNull(user) || Objects.isNull(contentId)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", msgArgs);
+				return;
+			}
+
+			String language = user.getPreferredLanguage();
+			language = this.resolveLanguage(language, sessionInfo);
+
+			ChannelType channelType = sessionInfo.getChannelType();
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.BROWSER;
+			}
+
+			final String channelName = channelType.name().toUpperCase();
+			log.debug("Preparing notification for language:{}, channel:{}, contentID:{} for CIF:{}", language,
+					channelName, contentId, user.getCif());
+			this.notifyBySms(contentId, user, language, channelName, msgArgs);
+
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotification) for:{}. Cause:{}", contentId, e);
+		}
+
+	}
+
+	public void processNotificationTransferAdvice(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters,
+												  final ExecuteTransferRequest transferRequest, ExecutePaymentResponse paymentResponse) {
+		log.info("Invoked processNotificationTransferAdvice for fundTransferType = {} ",transferRequest.getFundTransferType());
+		try {
+			User user = sessionInfo.getUser();
+			log.info("User: "+user);
+			if (Objects.isNull(user) || Objects.isNull(contentID)) {
+				log.warn("##### Notification did not send as User or contentID is null. Params:{}", parameters);
+				return;
+			}
+			String language = user.getPreferredLanguage();
+			log.info("Language: "+language);
+			language = this.resolveLanguage(language, sessionInfo);
+			ChannelType channelType = sessionInfo.getChannelType();
+			log.info("ChannelType: "+channelType);
+			if (channelType == ChannelType.TAB) {
+				channelType = ChannelType.MOBILE;
+			}
+			if (channelType == null) {
+				log.warn("ChannelType in SessionContext is:{}", channelType);
+				channelType = ChannelType.BROWSER;
+			}
+			final String channelName = channelType.name().toUpperCase();
+			log.info("Preparing notification for  channel:{}, contentID:{} for CIF:{}", channelName, contentID, user.getCif());
+			if(user.getOtpState() == OTPState.EMAIL){
+				this.notifyThroughEmailForTransferAdvice(transferRequest,paymentResponse,contentID,channelName,sessionInfo,parameters,language);
+			} else if(user.getOtpState() == OTPState.SMS){
+				this.notifyBySms(contentID, user, language, channelName, parameters);
+			} else {
+				this.notifyThroughEmailForTransferAdvice(transferRequest,paymentResponse,contentID,channelName,sessionInfo,parameters,language);
+				this.notifyBySms(contentID, user, language, channelName, parameters);
+				this.notifyByDigitalNotifications(contentID, user, language, channelName, parameters);
+			}
+		} catch (Exception e) {
+			log.error("Exception while processing notification (processNotificationTransferAdvice) for:{}. Cause:{}", contentID, e);
+		}
+	}
+
+	/**
+	 * Method to build Email body, Email Subject, Smart Pdf password encryption
+	 * @param contentItem ContentItem from content_item table
+	 * @param user User
+	 * @param parameters parameters
+	 * @param pdfDocAttachment samet pdf
+	 * @param encryptionKey smart pdf password
+	 */
+	private void notifyByEmailWithSmartPdf(ContentItem contentItem, User user, Map<String, Object> parameters,
+										   PdfDocAttachment pdfDocAttachment, String encryptionKey) {
+		final String emailBodyContent = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getContentText(), parameters);
+		final String emailSubject = TextUtils.INSTANCE.createTextFromTemplate(contentItem.getMetadata(), parameters);
+		log.info("notifyByEmailWithSmartPdf: CIF:{}, Email subject:{} and Email Text:{}", user.getCif(), emailSubject, emailBodyContent);
+		String base64Bin = Objects.nonNull(encryptionKey) ?
+				pdfHelper.getPasswordProtectedPDF(pdfDocAttachment.getFileContent(), encryptionKey) : pdfDocAttachment.getFileContent();
+		final String fileName = pdfDocAttachment.getFileName().concat(".").concat(pdfDocAttachment.getDocumentType().getDbShortCode().toLowerCase());
+		this.sendEmailWithSmartPdf(user.getEmail(), base64Bin, emailSubject, fileName,
+				pdfDocAttachment.getDocumentType().getContentType(), emailBodyContent,contentItem.getContentType());
+	}
+
+	private String buildEncryptionKey(User user) {
+		String encryptionKey = null;
+		if (Objects.nonNull(user.getDateOfBirth()) && Objects.nonNull(user.getMobileNo())) {
+			log.info("User DOB is present");
+			String dateOfBirth = user.getDateOfBirth().substring(0,2)+user.getDateOfBirth().substring(3,5);
+			encryptionKey = StringUtils.right(user.getMobileNo(), 4) + dateOfBirth;
+		}
+		return encryptionKey;
+	}
+
+	/**
+	 * Method to send emailRequest with smartPdf to Email MQ Queue
+	 * @param emailId emailId
+	 * @param base64Bin smartPdf
+	 * @param emailSubject emailSubject
+	 * @param emailFileName attachmentFileName
+	 * @param mimeType PDF
+	 * @param emailBody emailBody
+	 */
+	private void sendEmailWithSmartPdf(final String emailId, final String base64Bin, final String emailSubject, final String emailFileName,
+									   final String mimeType, final String emailBody, final String emailCntMimeType) {
+		if (StringUtils.isBlank(emailId)) {
+			log.warn("Email processing SKIPPED as no emailid available in system. emailSubject:{}", emailSubject);
+			return;
+		}
+		EmailRequest request = buildSmartPdfEmailReq(emailId,base64Bin,emailSubject,emailFileName,mimeType,emailBody,emailCntMimeType);
+		log.info("Sending email request to mq queue notifier to process further");
+		mqNotifier.sendEmail(JsonUtils.convertToJson(request));
+	}
+
+	/**
+	 * Method to Build Email Attachment
+	 * @param base64Bin PDF Content
+	 * @param mimeType PDF
+	 * @param emailFileName Name of PDF file
+	 * @return EmailAttachment
+	 */
+	private EmailAttachment buildEmailAttachment(final String base64Bin,final String mimeType,final String emailFileName) {
+		EmailAttachment attachment = new EmailAttachment();
+		attachment.setAttachementBytes(base64Bin);
+		attachment.setMimeType(mimeType);
+		attachment.setFileName(emailFileName);
+		return attachment;
+	}
+
+	private void notifyThroughEmailForTransferAdvice(final ExecuteTransferRequest transferRequest, ExecutePaymentResponse paymentResponse,
+													 ContentID contentID, String channelName, SessionInfo sessionInfo,
+													 Map<String, Object> parameters, String language) {
+		String encryptionKey = buildEncryptionKey(sessionInfo.getUser());
+		if (Objects.nonNull(encryptionKey)) {
+			PdfDocAttachment pdfDocAttachment = transferPdfHelper.generateDocument(transferRequest, paymentResponse, sessionInfo);
+			if (Objects.nonNull(pdfDocAttachment) && Objects.nonNull(pdfDocAttachment.getFileContent())) {
+				log.info("Notify by Email with Transfer Advice attachment");
+				notifyByEmailTransferAdvice(contentID,channelName,sessionInfo,parameters,pdfDocAttachment,encryptionKey,language);
+			} else {
+				log.info("Notify by Email without Transfer Advice attachment");
+				this.notifyByEmail(contentID, sessionInfo.getUser(), language, channelName, parameters);
+			}
+		} else {
+			log.info("User DOB or Mobile No. not present, proceeding notifyByEmail without TransferAdvice attachment");
+			this.notifyByEmail(contentID, sessionInfo.getUser(), language, channelName, parameters);
+		}
+	}
+
+	/**
+	 * Method to get the contentItem from table for WithinFab and WithinUAE with transfer advice message
+	 * @param contentID ContentID
+	 * @param channelName channelName
+	 * @param sessionInfo SessionInfo
+	 * @param parameters  parameters
+	 * @param pdfDocAttachment smart pdf
+	 * @param encryptionKey smart pdf password
+	 */
+	private void notifyByEmailTransferAdvice(ContentID contentID, String channelName,SessionInfo sessionInfo, Map<String, Object> parameters,
+											 PdfDocAttachment pdfDocAttachment,String encryptionKey,String language) {
+		ContentItem contentItem = getContent(contentID,channelName,language);
+		if (Objects.nonNull(contentItem)) {
+			this.notifyByEmailWithSmartPdf(contentItem, sessionInfo.getUser(), parameters, pdfDocAttachment,
+					encryptionKey);
+		} else {
+			log.error("**WARNING** Content_Item is not configured for:{}, notification:{}, language:{}, channel:{}", contentID, NotificationType.EMAIL, AppConstants.LOCALE_EN, channelName);
+		}
+	}
+
+	/**
+	 * Method to get the content from content_item table for WithinFAB and WithinUAE(IPP and IPI)
+	 * @param contentID ContentID
+	 * @param channelName channelName
+	 * @return ContentItem
+	 */
+	private ContentItem getContent(ContentID contentID, String channelName,String language) {
+		ContentItem contentItem;
+		if (contentID.name().equalsIgnoreCase(ContentID.WITHIN_UAE_FUNDS_TRANSFER_SUCCESS.name())) {
+			contentItem = this.getContentItem(ContentID.WITHIN_UAE_FUNDS_TRANSFER_ATTACH_SUCCESS, NotificationType.EMAIL, language, channelName);
+		} else {
+			contentItem = this.getContentItem(ContentID.WITHIN_BANK_FUNDS_TRANSFER_ATTACH_SUCCESS, NotificationType.EMAIL, language, channelName);
+		}
+		return contentItem;
+	}
+
+	/**
+	 * Build Smart Pdf Email Request
+	 * @param emailId emailId
+	 * @param base64Bin smart Pdf
+	 * @param emailSubject emailSubject
+	 * @param emailFileName attachment file name
+	 * @param mimeType PDF
+	 * @param emailBody emailBody
+	 * @return EmailRequest
+	 */
+	private EmailRequest buildSmartPdfEmailReq(final String emailId, final String base64Bin, final String emailSubject,
+											   final String emailFileName, final String mimeType, final String emailBody,
+											   final String emailCntMimeType) {
+		EmailRequest request = new EmailRequest();
+		request.setFromAddress(settingsRepository.getEmailFromAddress());
+		request.addToAddress(emailId);
+		request.setEntityName(settingsRepository.getEntityName());
+		request.setSourceSystem(settingsRepository.getEntityName());
+		request.setEmailSubject(emailSubject);
+		request.setRequestID(TextUtils.INSTANCE.generateId());
+		request.addEmailAttachment(buildEmailAttachment(base64Bin,mimeType,emailFileName));
+		request.setEmailBodyContentType(emailCntMimeType);
+		request.setEmailBodyContent(emailBody);
+		return request;
+	}
+
+
 private Boolean createAutopay;
 	private Boolean createBeneficiary;
 	private String sourceProductRef;
