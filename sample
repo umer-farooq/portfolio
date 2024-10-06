@@ -1,3 +1,46 @@
+Waiver
+Hi Team,
+
+As I will be on leave soon, I wanted to provide some details regarding performance testing and security testing waivers for the upcoming changes. I have attached the relevant documentation for your reference.
+
+Below are the details for each item, along with specific instructions:
+
+1. FMDB-114370 - Inclusion of Transfer Advice in Email Notification
+Action: Please add Srineel in my absence to explain the scope and handle any queries.
+2. PRM-10417 - BUNA SI Transfer Wrong Tag Mapping
+Details: This is a bug fix. The change involves introducing and using the routing rule table in the Standing Instructions project, similar to the implementation in PBAPI.
+3. FMDB-140086 - FAB Rewards Indulge Credit Card [Product Name Change]
+Details: This is purely a database change to update the card name for certain product series.
+4. MF-2445 - Middleware Modernization Project
+Details: This change is part of the middleware modernization effort. It will only involve updates in the database for PBAPI, not in the microservices.
+5. FMDB-134681 - FAB Mobile Service Restriction During Phone Call
+Details: The backend change here is simply exposing a flag to the front end to enable or restrict certain features. The main changes lie in the front-end implementation.
+6. FMDB-144541 - URL Migration to KONG
+Details: Similar to other middleware modernization activities, this change affects only the database for PBAPI and the Paramstore for microservices.
+Please ensure that these items are handled appropriately in my absence. If you have any questions, feel free to reach out to my developers, who will be available to assist.
+
+Thank you for your support!
+[------------------------------
+I hope this message finds you well. I wanted to quickly touch base regarding the migration of our DataPower endpoints to KONG endpoints.
+
+As you might know, I’ve recently taken over the handover you provided, and I truly appreciate all the detailed information you shared. However, an issue surfaced when the KONG team decommissioned some URLs in the non-prod environment around the 4th of October. This was based on the assumption that sign-off had already been provided during your time as the lead.
+
+To ensure we weren't blocked for our 4th October regression, I reached out to the KONG team, and they were kind enough to temporarily provision the URLs. However, they've informed me that they plan to decommission them soon. Given the situation, I’ve now planned to include these missing endpoints in our 18th October release.
+
+That being said, I’m a bit uncertain why these endpoints weren’t taken to production earlier. Could you shed some light on this decision or provide any context that might help us proceed smoothly? Your insights would be incredibly helpful as we navigate this transition.
+
+Looking forward to your response, and thanks for your support!
+-------------------------------------
+Hi Team,
+
+I hope you’re all doing well. Before we begin work on MF-2446 or MF-2447, I’d like to arrange a Knowledge Transfer (KT) session for viewing logs in IBMB. This will ensure we are all on the same page and can handle any logging-related tasks smoothly.
+
+I will be on leave during this time, but our developers are more than happy to facilitate the KT session. They will walk you through the process and answer any questions you might have.
+
+Please let me know your availability, and we’ll coordinate a suitable time for the session.
+
+Thank you, and looking forward to your cooperation!
+--------------------------------------------
 However, I’d like to highlight a potential risk we need to consider before proceeding further. Currently, for NPSS services, we only have the environment provided by the central bank, which, as we’ve observed, is not stable at this moment. This instability poses a significant risk, as it may not allow us to test the changes end-to-end effectively.
 
 Given this situation, I am concerned about moving forward with these changes without thorough end-to-end testing. Could you please shed some light on how we might mitigate this risk?
