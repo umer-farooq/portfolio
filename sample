@@ -1,9 +1,46 @@
-FMDB-114370 - Inclusion of transfer advice in email notification       
-PRM-10417-BUNA SI Transfer wrong tag mapping
-FMDB-140086-FAB REWARDS INDULGE CREDIT CARD || 542536 [Productnamechange]
-MF-2445 - Middleware Modernization Project
-FMDB-134681 FAB Mobile Service Restriction During Phone Call
-FMDB-144541 URL's migration to KONG       
+Hi [Recipient's Name],
+
+As I will be stepping away from the project, I have documented all the relevant details, including requirements, build analysis, Git links, and IBMB components, on a Confluence page for your reference. You can find the link to the page here.
+
+Below is the current status of the ongoing tasks and items that will need your attention:
+
+1. Gamification Banner Update
+Action Required: A senior developer is needed to support the banner upload to the production environment.
+2. LLD for Force Password Update
+Status: One use case is still pending with Fareed and Deepali to coordinate with the business team. The remaining Low-Level Design (LLD) has been documented and shared with the architect for review.
+Next Steps: Once the review is complete, it will be forwarded to Bala and Ayush for further evaluation.
+3. FMDB-114370 - Inclusion of Transfer Advice in Email Notification
+Owner: Shajan
+Status: Currently addressing review comments and collaborating with the Business Analyst (BA) and testers for change requests and bug fixes.
+4. PRM-10417-BUNA SI Transfer Wrong Tag Mapping
+Owner: Rahul
+Status: Changes are in progress.
+5. FMDB-140086 - FAB Rewards Indulge Credit Card [Product Name Change]
+Owner: Shajan
+Status: Scripts have been prepared and shared. Awaiting onboarding team to implement the changes.
+6. MF-2445 - Middleware Modernization Project
+Owners: Shajan / Rahul
+Status: Currently awaiting sign-off.
+7. FMDB-134681 - FAB Mobile Service Restriction During Phone Call
+Owner: Rahul
+Status: Changes have been deployed on the backend, and testing is in progress.
+8. FMDB-144541 - URL Migration to KONG
+Status: Analysis for the missing URLs has been updated.
+Next Steps: Ensure all sign-offs are arranged.
+9. Production Support Items - 4th October
+Sanction Country: Post-deployment validation completed. The production team has confirmed that it is working as expected.
+Email / SMS Endpoint Migration: Sanity check was completed, and production team confirmed functionality as expected till 5th October.
+Sim Swap Changes: The changes are operational; however, there is a timeout issue with Etisalat. The production team is collaborating with the middleware team to resolve this.
+Please feel free to refer to the Confluence page for detailed information. If you have any questions or require further clarification, do not hesitate to reach out.
+
+Thank you for your support in ensuring a smooth transition.
+
+Best regards,
+[Your Name]
+[Your Position]
+[Your Contact Information]
+
+
 
 Phase 1: Generation of Smart PDF
 The first phase involves creating a smart and extensible PDF generation mechanism that supports various transfer types and ensures that the document creation logic remains generic. This phase focuses on applying the Template Method design pattern and creating abstract and concrete classes for the PDF generation.
