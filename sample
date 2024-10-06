@@ -1,3 +1,24 @@
+Vision of the Requirement:
+The goal is to provide customers with a uniform process for accessing transfer advice (a receipt or confirmation of a transaction).
+Currently, some transactions offer email notifications with the transfer advice, while others don't, leading to inconsistencies.
+The ultimate goal is to make this process consistent across all types of transactions.
+
+Current Requirement:
+Quick Fix: As a temporary solution, the transfer advice will be attached to the email notification sent to customers when a transaction is successful. This requires minimal changes and is meant to address the immediate need for providing transfer advice quickly.
+
+Future Phase:
+
+In the future, the plan is to display a button on the transaction success screen within the app. This button will allow customers to download the transfer advice as a PDF.
+The transfer advice will also be available within the transaction history for easy access.
+Additionally, the transfer advice will still be sent via email for customers who prefer to keep a record.
+Reusability: When developing this feature, it should be built in a way that makes the PDF generation reusable. This ensures that it can be implemented in other areas (e.g., different transaction types) without extensive rework.
+
+Consistency in Providing Transfer Advice: Alan suggests that instead of using email notifications for providing transfer advice, the feature should be available directly within the app. This means allowing customers to download the transfer advice from the transaction success screen itself, promoting a uniform and instant method for accessing this document.
+
+Initial Vision vs. Quick Fix: Alan acknowledges that while the initial plan was to add a button on the success screen for customers to download the transfer advice, this required significant development work. Therefore, a quick fix was proposed: attaching the transfer advice in the email notifications to address the immediate need without changing the app’s structure.
+
+Future State: He emphasizes that, in the future, the transfer advice should be available in both places – on the app’s success screen and as part of the email notification. This aligns with practices in other banks and provides flexibility for customers. Alan also implies the importance of building the functionality in a way that makes it easy to modify or extend in the future.
+
 sequenceDiagram
     participant App
     participant PersonalBankingAPI
