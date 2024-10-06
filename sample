@@ -1,3 +1,362 @@
+private Boolean createAutopay;
+	private Boolean createBeneficiary;
+	private String sourceProductRef;
+	private ProductTypes sourceProductType;
+	private String sourceCurrency;
+	private ProductTypes receiverProductType;
+	private String receiverProductRef;
+	private String receiverCurrency; 	// Will be used in case of only Ownaccount transfer. In other case beneficiary currency will be used for all existing beneficiary transfer.
+	private String transferDescription;
+	private Double amount;
+	private String transferCurrency;
+	private FundTransferTypes fundTransferType;	
+	private String transferType;
+	private String chargeOption;
+	private String accountingUnitIdentifier;
+	private Autopay autopay;
+	private Beneficiary beneficiary;
+	private String transferDate;
+	private Double chargeToCustomer;
+	private String nickName;
+	private Double cashAdvanceFee;
+	private Double taxAmount;
+	private boolean isIPIRequest; // Enriched by Channel backend for Within uae transfer
+	private String transferPurposeCode;
+	private String isAddwithTransfer;// This will be used in PAYIT to bypass authentication in case on add and pay
+	private String edirhamCardId;// This will be used in E11 to add E11 card id to pass IIB execute call
+	private String edirhamTransitAccNumber; // This will be used in E11 to set as credit account number to pass IIB execute call
+	private Double edirhamCharges;//  This will be used in E11 to add in amount while top up
+	private Boolean isReceiverNameUpdated;
+	private String mCPaymentType;
+    private IPOApplyDetails ipoSubscribeDetails;
+
+    private boolean isIPPRequest;
+    private String cityOfBirth;
+    private String dateOfBirth;
+
+    private InsuranceDetails insuranceDetails;
+    private Integer version = 1;
+
+
+	public boolean isIPIRequest() {
+		return isIPIRequest;
+	}
+
+	public void setIPIRequest(boolean isIPIRequest) {
+		this.isIPIRequest = isIPIRequest;
+	}
+
+	public String getTransferDate() {
+		return transferDate;
+	}
+
+	public void setTransferDate(String transferDate) {
+		this.transferDate = transferDate;
+	}
+
+	public Boolean getCreateAutopay() {
+		return createAutopay;
+	}
+
+	public void setCreateAutopay(Boolean createAutopay) {
+		this.createAutopay = createAutopay;
+	}
+
+	public Boolean getCreateBeneficiary() {
+		return createBeneficiary;
+	}
+
+	public void setCreateBeneficiary(Boolean createBeneficiary) {
+		this.createBeneficiary = createBeneficiary;
+	}
+
+	public Beneficiary getBeneficiary() {
+		return beneficiary;
+	}
+
+	public void setBeneficiary(Beneficiary beneficiary) {
+		this.beneficiary = beneficiary;
+	}
+
+	public Autopay getAutopay() {
+		return autopay;
+	}
+
+	public void setAutopay(Autopay autopay) {
+		this.autopay = autopay;
+	}
+
+	public ProductTypes getSourceProductType() {
+		return sourceProductType;
+	}
+
+	public void setSourceProductType(ProductTypes sourceProductType) {
+		this.sourceProductType = sourceProductType;
+	}
+
+	public ProductTypes getReceiverProductType() {
+		return receiverProductType;
+	}
+
+	public void setReceiverProductType(ProductTypes receiverProductType) {
+		this.receiverProductType = receiverProductType;
+	}
+
+	public String getSourceProductRef() {
+		return sourceProductRef;
+	}
+
+	public void setSourceProductRef(String sourceProductRef) {
+		this.sourceProductRef = sourceProductRef;
+	}
+
+	public String getReceiverProductRef() {
+		return receiverProductRef;
+	}
+
+	public void setReceiverProductRef(String receiverProductRef) {
+		this.receiverProductRef = receiverProductRef;
+	}
+
+	public String getTransferDescription() {
+		return transferDescription;
+	}
+
+	public void setTransferDescription(String transferDescription) {
+		this.transferDescription = transferDescription;
+	}
+
+	public Double getAmount() {
+		return amount;
+	}
+
+	public void setAmount(Double amount) {
+		this.amount = amount;
+	}
+
+	public String getTransferCurrency() {
+		return transferCurrency;
+	}
+
+	public void setTransferCurrency(String transferCurrency) {
+		this.transferCurrency = transferCurrency;
+	}
+
+
+	public String getChargeOption() {
+		return chargeOption;
+	}
+
+	public void setChargeOption(String chargeOption) {
+		this.chargeOption = chargeOption;
+	}
+
+	public String getAccountingUnitIdentifier() {
+		return accountingUnitIdentifier;
+	}
+
+	public String getTransferType() {
+		return transferType;
+	}
+
+	public void setAccountingUnitIdentifier(String accountingUnitIdentifier) {
+		this.accountingUnitIdentifier = accountingUnitIdentifier;
+	}
+
+	public FundTransferTypes getFundTransferType() {
+		return fundTransferType;
+	}
+
+	public void setFundTransferType(FundTransferTypes fundTransferType) {
+		this.fundTransferType = fundTransferType;
+	}
+
+	public void setTransferType(String transferType) {
+		this.transferType = transferType;
+	}
+
+	/**
+	 * @return the chargeToCustomer
+	 */
+	public Double getChargeToCustomer() {
+		return chargeToCustomer;
+	}
+
+	/**
+	 * @return the chargeToCustomer
+	 */
+	@JsonIgnore
+	public String getChargeToCustomerAsString() {
+		if(Objects.nonNull(chargeToCustomer)) {
+			return String.valueOf(chargeToCustomer);
+		}
+		return String.valueOf(0.0);
+	}
+
+	/**
+	 * @param chargeToCustomer the chargeToCustomer to set
+	 */
+	public void setChargeToCustomer(Double chargeToCustomer) {
+		this.chargeToCustomer = chargeToCustomer;
+	}
+
+	/**
+	 * @return the nickName
+	 */
+	public String getNickName() {
+		return nickName;
+	}
+
+	/**
+	 * @param nickName the nickName to set
+	 */
+	public void setNickName(String nickName) {
+		this.nickName = nickName;
+	}
+
+	public String getSourceCurrency() {
+		return sourceCurrency;
+	}
+
+	public void setSourceCurrency(String sourceCurrency) {
+		this.sourceCurrency = sourceCurrency;
+	}
+
+	public String getReceiverCurrency() {
+		return receiverCurrency;
+	}
+
+	public void setReceiverCurrency(String receiverCurrency) {
+		this.receiverCurrency = receiverCurrency;
+	}
+
+	public Double getCashAdvanceFee() {
+		return cashAdvanceFee;
+	}
+
+	public void setCashAdvanceFee(Double cashAdvanceFee) {
+		this.cashAdvanceFee = cashAdvanceFee;
+	}
+
+	/**
+	 * @return the taxAmount
+	 */
+	public Double getTaxAmount() {
+		return taxAmount;
+	}
+
+	/**
+	 * @param taxAmount the taxAmount to set
+	 */
+	public void setTaxAmount(Double taxAmount) {
+		this.taxAmount = taxAmount;
+	}
+
+	public String getTransferPurposeCode() {
+		return transferPurposeCode;
+	}
+
+	public void setTransferPurposeCode(String transferPurposeCode) {
+		this.transferPurposeCode = transferPurposeCode;
+	}
+
+	public String getIsAddwithTransfer() {
+		return isAddwithTransfer;
+	}
+
+	public void setIsAddwithTransfer(String isAddwithTransfer) {
+		this.isAddwithTransfer = isAddwithTransfer;
+	}
+
+	public String getEdirhamCardId() {
+		return edirhamCardId;
+	}
+
+	public void setEdirhamCardId(String edirhamCardId) {
+		this.edirhamCardId = edirhamCardId;
+	}
+
+	public String getEdirhamTransitAccNumber() {
+		return edirhamTransitAccNumber;
+	}
+
+	public void setEdirhamTransitAccNumber(String edirhamTransitAccNumber) {
+		this.edirhamTransitAccNumber = edirhamTransitAccNumber;
+	}
+
+	public Double getEdirhamCharges() {
+		return edirhamCharges;
+	}
+
+	public void setEdirhamCharges(Double edirhamCharges) {
+		this.edirhamCharges = edirhamCharges;
+	}
+
+	public Boolean getIsReceiverNameUpdated() {
+		return isReceiverNameUpdated;
+	}
+
+	public void setIsReceiverNameUpdated(Boolean isReceiverNameUpdated) {
+		this.isReceiverNameUpdated = isReceiverNameUpdated;
+	}
+
+	public String getmCPaymentType() {
+		return mCPaymentType;
+	}
+
+	public void setmCPaymentType(String mCPaymentType) {
+		this.mCPaymentType = mCPaymentType;
+	}
+	
+	public IPOApplyDetails getIpoSubscribeDetails() {
+		return ipoSubscribeDetails;
+	}
+
+	public void setIpoSubscribeDetails(IPOApplyDetails ipoSubscribeDetails) {
+		this.ipoSubscribeDetails = ipoSubscribeDetails;
+	}
+
+
+	public boolean isIPPRequest() {
+		return isIPPRequest;
+	}
+
+	public void setIPPRequest(boolean isIPPRequest) {
+		this.isIPPRequest = isIPPRequest;
+	}
+
+	public String getCityOfBirth() {
+		return cityOfBirth;
+	}
+
+	public void setCityOfBirth(String cityOfBirth) {
+		this.cityOfBirth = cityOfBirth;
+	}
+
+	public String getDateOfBirth() {
+		return dateOfBirth;
+	}
+
+	public void setDateOfBirth(String dateOfBirth) {
+		this.dateOfBirth = dateOfBirth;
+	}
+	
+	public InsuranceDetails getInsuranceDetails() {
+		return insuranceDetails;
+	}
+
+	public void setInsuranceDetails(InsuranceDetails insuranceDetails) {
+		this.insuranceDetails = insuranceDetails;
+	}
+
+	public Integer getVersion() {
+		return version;
+	}
+
+	public void setVersion(Integer version) {
+		this.version = version;
+	}
+
 private void notifyPaymentSuccess(final ExecuteTransferRequest transferRequest, ExecutePaymentResponse paymentResponse, SessionInfo sessionInfo) {
 		log.info("Invoked notifyPaymentSuccess for fundTransferType = {} ",transferRequest.getFundTransferType());
 		ContentID contentTransfer = ContentID.getSuccessContentId(transferRequest.getFundTransferType().name(), BLANK, SUCCESS);
