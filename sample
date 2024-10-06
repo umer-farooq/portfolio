@@ -33,7 +33,12 @@ Status: Changes have been deployed on the backend, and testing is in progress.
 8. FMDB-144541 - URL Migration to KONG
 Status: Analysis for the missing URLs has been updated.
 Next Steps: Ensure all sign-offs are arranged.
-9. Production Support Items - 4th October
+
+9 MF-2446 and MF-2447 - Middleware Modernization
+Status: To be picked by developers for backtracking the endpoints once middleware team is ready
+Owner Shajan (MF-2446) and Rahul (MF-2447)
+
+10. Production Support Items - 4th October
 Sanction Country: Post-deployment validation completed. The production team has confirmed that it is working as expected.
 Email / SMS Endpoint Migration: Sanity check was completed, and production team confirmed functionality as expected till 5th October.
 Sim Swap Changes: The changes are operational; however, there is a timeout issue with Etisalat. The production team is collaborating with the middleware team to resolve this.
