@@ -1,3 +1,10 @@
+FMDB-114370 - Inclusion of transfer advice in email notification       
+PRM-10417-BUNA SI Transfer wrong tag mapping
+FMDB-140086-FAB REWARDS INDULGE CREDIT CARD || 542536 [Productnamechange]
+MF-2445 - Middleware Modernization Project
+FMDB-134681 FAB Mobile Service Restriction During Phone Call
+FMDB-144541 URL's migration to KONG       
+
 Phase 1: Generation of Smart PDF
 The first phase involves creating a smart and extensible PDF generation mechanism that supports various transfer types and ensures that the document creation logic remains generic. This phase focuses on applying the Template Method design pattern and creating abstract and concrete classes for the PDF generation.
 
