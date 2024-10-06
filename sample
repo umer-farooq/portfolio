@@ -1,24 +1,91 @@
-Vision of the Requirement:
-The goal is to provide customers with a uniform process for accessing transfer advice (a receipt or confirmation of a transaction).
-Currently, some transactions offer email notifications with the transfer advice, while others don't, leading to inconsistencies.
-The ultimate goal is to make this process consistent across all types of transactions.
+Phase 1: Generation of Smart PDF
+The first phase involves creating a smart and extensible PDF generation mechanism that supports various transfer types and ensures that the document creation logic remains generic. This phase focuses on applying the Template Method design pattern and creating abstract and concrete classes for the PDF generation.
 
-Current Requirement:
-Quick Fix: As a temporary solution, the transfer advice will be attached to the email notification sent to customers when a transaction is successful. This requires minimal changes and is meant to address the immediate need for providing transfer advice quickly.
+Steps and Components
+Abstract SmartPdfGenerator Class:
 
-Future Phase:
+Create an abstract class SmartPdfGenerator that defines the common logic for generating a PDF document. The class includes:
+A template method generatePdf that contains the common PDF generation logic for different transfer types.
+An abstract method buildDocumentRequest, which subclasses will implement to build entity-specific document requests.
+Constructor-based dependency injection for GenerateDocumentHelper, which will handle the actual PDF document generation.
+Subclass TransferPdfGenerator:
 
-In the future, the plan is to display a button on the transaction success screen within the app. This button will allow customers to download the transfer advice as a PDF.
-The transfer advice will also be available within the transaction history for easy access.
-Additionally, the transfer advice will still be sent via email for customers who prefer to keep a record.
-Reusability: When developing this feature, it should be built in a way that makes the PDF generation reusable. This ensures that it can be implemented in other areas (e.g., different transaction types) without extensive rework.
+Implement the TransferPdfGenerator class, extending SmartPdfGenerator to handle TransferAdviceRequest.
+Override buildDocumentRequest to create a DocumentRequest specific to the transfer advice.
+Include strategies to select content items (getContentItemExchange) and map data fields (mapDataFields) based on transfer types.
+Use a strategy to determine the file name dynamically using the getFileName method.
+Add metadata to DocumentRequest, such as documentGeneratedFor and documentGeneratedDate.
+Supporting Strategies:
 
-Consistency in Providing Transfer Advice: Alan suggests that instead of using email notifications for providing transfer advice, the feature should be available directly within the app. This means allowing customers to download the transfer advice from the transaction success screen itself, promoting a uniform and instant method for accessing this document.
+Implement helper classes or methods (ContentItemExchangeStrategy, DataFieldMapperStrategy, and FileNameStrategy) to handle the dynamic aspects of content generation.
+These strategies will help build content items, map data fields, and determine file names based on different transfer types.
+Updated Models:
 
-Initial Vision vs. Quick Fix: Alan acknowledges that while the initial plan was to add a button on the success screen for customers to download the transfer advice, this required significant development work. Therefore, a quick fix was proposed: attaching the transfer advice in the email notifications to address the immediate need without changing the app’s structure.
+Modify PdfRequest to include fields documentGeneratedFor and documentGeneratedDate.
+Create a new subclass, TransferAdviceRequest, which extends PdfRequest and includes necessary transfer-related fields.
+Update PdfDocAttachment to reflect the fields for document storage.
+Outcome:
+This phase introduces a flexible and extensible smart PDF generation framework that can support different transfer types. The SmartPdfGenerator template method ensures the logic is reusable, while subclasses implement transfer-specific behavior.
 
-Future State: He emphasizes that, in the future, the transfer advice should be available in both places – on the app’s success screen and as part of the email notification. This aligns with practices in other banks and provides flexibility for customers. Alan also implies the importance of building the functionality in a way that makes it easy to modify or extend in the future.
+Phase 2: Enhancement in the Notification Service
+The second phase focuses on enhancing the NotificationService to support sending notifications with or without PDF attachments. This involves refactoring existing methods to handle additional parameters and making the service more flexible.
 
+Steps and Components
+Refactor processNotification Method:
+
+Overload the processNotification method to accept an optional PdfDocAttachment. The presence of this attachment will determine whether the email should include the PDF.
+Implement the logic within processNotification to decide the type of notification based on whether a PdfDocAttachment is provided:
+With Attachment: Calls notifyByEmailWithAttachment, passing the PDF as an attachment.
+Without Attachment: Calls notifyByEmail for regular email notifications.
+Remove direct dependencies on transfer-specific logic to make the method more generalized.
+Implement notifyByEmailWithAttachment:
+
+Create a private method notifyByEmailWithAttachment in NotificationService to handle email notifications that include a PDF attachment.
+Retrieve the ContentItem using the getContentItem method and use it to build the email body and subject.
+Utilize PdfHelper to apply encryption to the PDF if required and send the email using sendEmailWithAttachment.
+Additional Support Methods:
+
+Introduce helper methods like resolveLanguage and resolveChannelName to streamline the notification process.
+Incorporate logic for handling SMS and digital notifications in the processNotification method as per user preferences.
+Outcome:
+The enhanced NotificationService is now capable of dynamically including PDF attachments when sending notifications. This service is now decoupled from transfer-specific logic, allowing it to be extended in the future to handle other notification types.
+
+Phase 3: Enhancement in the Fund Transfers Service
+The final phase integrates the PDF generation and enhanced notification service into the fund transfer process. This includes making the decision to generate a PDF based on the transfer type and passing the necessary parameters to the notification service.
+
+Steps and Components
+Modify notifyPaymentSuccess Method in FundTransferService:
+
+Refactor the notifyPaymentSuccess method to handle different transfer types (WITHIN_UAE_FUNDS_TRANSFER and WITHIN_FAB_FUNDS_TRANSFER).
+Introduce logic to determine if a transfer advice PDF should be generated by using the shouldSendTransferAdvice method.
+For WITHIN_UAE_FUNDS_TRANSFER, only generate the PDF if the account supports IPP or IPI.
+For WITHIN_FAB_FUNDS_TRANSFER, always generate the PDF.
+Generate PDF Attachment:
+
+If the transfer requires a PDF, call TransferPdfGenerator.generatePdf to generate the document.
+Use transferAdvicePdfGenerator.buildEncryptionKey to get the necessary encryption key for the PDF.
+Store the resulting PdfDocAttachment for later use in the notification process.
+Update Content ID:
+
+Introduce getContentForTransferAdvice to append the word "ATTACHMENT" to the original ContentID, indicating that the notification includes a PDF attachment.
+Pass PDF to NotificationService:
+
+Pass the PdfDocAttachment to the NotificationService using the overloaded processNotification method.
+If no PDF is required, call processNotification without the attachment, falling back to the default notification process.
+Helper Methods:
+
+Implement utility methods like buildParametersForContent to construct the message arguments for the notification.
+Update the shouldSendTransferAdvice method to include the conditions for generating the PDF.
+Outcome:
+The FundTransferService is now capable of dynamically deciding whether to generate and send a transfer advice PDF based on the type of transfer. This logic is cleanly separated, reducing code duplication and making future extensions easier.
+
+Summary
+These three phases provide a cohesive solution for generating, managing, and delivering transfer advice PDFs:
+
+Phase 1: Introduces a smart, extensible PDF generation mechanism (SmartPdfGenerator and its subclass TransferPdfGenerator).
+Phase 2: Enhances the NotificationService to handle notifications with or without PDF attachments, improving flexibility.
+Phase 3: Integrates the smart PDF generation and enhanced notification handling into the fund transfer process in FundTransferService.
+This structured approach ensures the system adheres to the Open-Closed Principle, allowing for future enhancements and extensions without modifying the core logic.
 sequenceDiagram
     participant App
     participant PersonalBankingAPI
