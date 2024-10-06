@@ -1,3 +1,5 @@
+FT_WITHIN_UAE_SUCCESS_ATTACHMENT
+FT_WITHIN_BANK_SUCCESS_ATTACHMENT
 processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters) {
 public void processNotification(ContentID contentID, SessionInfo sessionInfo, Map<String, Object> parameters) {
 		try {
