@@ -1,189 +1,67 @@
-Waiver
-Hi Team,
+sequenceDiagram
+    participant App
+    participant PersonalBankingAPI
+    participant TransferFundsService
+    participant SmartPdfGenerator
+    participant TransferPdfGenerator
+    participant GenerateDocumentHelper
+    participant NotificationService
+    participant EmailService
 
-As I will be on leave soon, I wanted to provide some details regarding performance testing and security testing waivers for the upcoming changes. I have attached the relevant documentation for your reference.
+    App->>PersonalBankingAPI: initiateTransfer(transferRequest)
+    PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
+    
+    TransferFundsService->>TransferFundsService: check if transfer type is WITHIN_UAE_FUNDS_TRANSFER or WITHIN_FAB_FUNDS_TRANSFER
+    
+    alt transferType is WITHIN_UAE_FUNDS_TRANSFER
+        TransferFundsService->>TransferFundsService: check if product type is Account
+        alt product type is Account
+            TransferFundsService->>TransferFundsService: check if IPI or IPP support is present
+            alt IPI or IPP support present
+                TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+                SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+                TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+                GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+                TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+                SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+                TransferFundsService->>TransferFundsService: update content ID for attachment
+            else IPI or IPP support not present
+                TransferFundsService->>TransferFundsService: Skip PDF generation
+            end
+        else product type is Card
+            TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+            SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+            TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+            GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+            TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+            SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+            TransferFundsService->>TransferFundsService: update content ID for attachment
+        end
+    else transferType is WITHIN_FAB_FUNDS_TRANSFER
+        TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+        SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+        TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+        GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+        TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+        SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+        TransferFundsService->>TransferFundsService: update content ID for attachment
+    else transfer type is neither
+        TransferFundsService->>TransferFundsService: Skip PDF generation
+    end
 
-Below are the details for each item, along with specific instructions:
+    TransferFundsService->>NotificationService: processNotification(contentID, sessionInfo, params, PdfDocAttachment)
+    NotificationService->>NotificationService: check if PDF attachment is present
+    alt If PDF attachment is present
+        NotificationService->>EmailService: notifyByEmailWithAttachment()
+    else If PDF attachment is not present
+        NotificationService->>EmailService: notifyByEmail()
+    end
 
-1. FMDB-114370 - Inclusion of Transfer Advice in Email Notification
-Action: Please add Srineel in my absence to explain the scope and handle any queries.
-2. PRM-10417 - BUNA SI Transfer Wrong Tag Mapping
-Details: This is a bug fix. The change involves introducing and using the routing rule table in the Standing Instructions project, similar to the implementation in PBAPI.
-3. FMDB-140086 - FAB Rewards Indulge Credit Card [Product Name Change]
-Details: This is purely a database change to update the card name for certain product series.
-4. MF-2445 - Middleware Modernization Project
-Details: This change is part of the middleware modernization effort. It will only involve updates in the database for PBAPI, not in the microservices.
-5. FMDB-134681 - FAB Mobile Service Restriction During Phone Call
-Details: The backend change here is simply exposing a flag to the front end to enable or restrict certain features. The main changes lie in the front-end implementation.
-6. FMDB-144541 - URL Migration to KONG
-Details: Similar to other middleware modernization activities, this change affects only the database for PBAPI and the Paramstore for microservices.
-Please ensure that these items are handled appropriately in my absence. If you have any questions, feel free to reach out to my developers, who will be available to assist.
-
-Thank you for your support!
-[------------------------------
-I hope this message finds you well. I wanted to quickly touch base regarding the migration of our DataPower endpoints to KONG endpoints.
-
-As you might know, I’ve recently taken over the handover you provided, and I truly appreciate all the detailed information you shared. However, an issue surfaced when the KONG team decommissioned some URLs in the non-prod environment around the 4th of October. This was based on the assumption that sign-off had already been provided during your time as the lead.
-
-To ensure we weren't blocked for our 4th October regression, I reached out to the KONG team, and they were kind enough to temporarily provision the URLs. However, they've informed me that they plan to decommission them soon. Given the situation, I’ve now planned to include these missing endpoints in our 18th October release.
-
-That being said, I’m a bit uncertain why these endpoints weren’t taken to production earlier. Could you shed some light on this decision or provide any context that might help us proceed smoothly? Your insights would be incredibly helpful as we navigate this transition.
-
-Looking forward to your response, and thanks for your support!
--------------------------------------
-Hi Team,
-
-I hope you’re all doing well. Before we begin work on MF-2446 or MF-2447, I’d like to arrange a Knowledge Transfer (KT) session for viewing logs in IBMB. This will ensure we are all on the same page and can handle any logging-related tasks smoothly.
-
-I will be on leave during this time, but our developers are more than happy to facilitate the KT session. They will walk you through the process and answer any questions you might have.
-
-Please let me know your availability, and we’ll coordinate a suitable time for the session.
-
-Thank you, and looking forward to your cooperation!
---------------------------------------------
-However, I’d like to highlight a potential risk we need to consider before proceeding further. Currently, for NPSS services, we only have the environment provided by the central bank, which, as we’ve observed, is not stable at this moment. This instability poses a significant risk, as it may not allow us to test the changes end-to-end effectively.
-
-Given this situation, I am concerned about moving forward with these changes without thorough end-to-end testing. Could you please shed some light on how we might mitigate this risk?
-
-
---------------------------
-Hi [Recipient's Name],
-
-As I will be stepping away from the project, I have documented all the relevant details, including requirements, build analysis, Git links, and IBMB components, on a Confluence page for your reference. You can find the link to the page here.
-
-Below is the current status of the ongoing tasks and items that will need your attention:
-
-1. Gamification Banner Update
-Action Required: A senior developer is needed to support the banner upload to the production environment.
-2. LLD for Force Password Update
-Status: One use case is still pending with Fareed and Deepali to coordinate with the business team. The remaining Low-Level Design (LLD) has been documented and shared with the architect for review.
-Next Steps: Once the review is complete, it will be forwarded to Bala and Ayush for further evaluation.
-3. FMDB-114370 - Inclusion of Transfer Advice in Email Notification
-Owner: Shajan
-Status: Currently addressing review comments and collaborating with the Business Analyst (BA) and testers for change requests and bug fixes.
-4. PRM-10417-BUNA SI Transfer Wrong Tag Mapping
-Owner: Rahul
-Status: Changes are in progress.
-5. FMDB-140086 - FAB Rewards Indulge Credit Card [Product Name Change]
-Owner: Shajan
-Status: Scripts have been prepared and shared. Awaiting onboarding team to implement the changes.
-6. MF-2445 - Middleware Modernization Project
-Owners: Shajan / Rahul
-Status: Currently awaiting sign-off.
-7. FMDB-134681 - FAB Mobile Service Restriction During Phone Call
-Owner: Rahul
-Status: Changes have been deployed on the backend, and testing is in progress.
-8. FMDB-144541 - URL Migration to KONG
-Status: Analysis for the missing URLs has been updated.
-Next Steps: Ensure all sign-offs are arranged.
-
-9 MF-2446 and MF-2447 - Middleware Modernization
-Status: To be picked by developers for backtracking the endpoints once middleware team is ready
-Owner Shajan (MF-2446) and Rahul (MF-2447)
-
-10. Production Support Items - 4th October
-Sanction Country: Post-deployment validation completed. The production team has confirmed that it is working as expected.
-Email / SMS Endpoint Migration: Sanity check was completed, and production team confirmed functionality as expected till 5th October.
-Sim Swap Changes: The changes are operational; however, there is a timeout issue with Etisalat. The production team is collaborating with the middleware team to resolve this.
-Please feel free to refer to the Confluence page for detailed information. If you have any questions or require further clarification, do not hesitate to reach out.
-
-Thank you for your support in ensuring a smooth transition.
-
-Best regards,
-[Your Name]
-[Your Position]
-[Your Contact Information]
-
-
-
-Phase 1: Generation of Smart PDF
-The first phase involves creating a smart and extensible PDF generation mechanism that supports various transfer types and ensures that the document creation logic remains generic. This phase focuses on applying the Template Method design pattern and creating abstract and concrete classes for the PDF generation.
-
-Steps and Components
-Abstract SmartPdfGenerator Class:
-
-Create an abstract class SmartPdfGenerator that defines the common logic for generating a PDF document. The class includes:
-A template method generatePdf that contains the common PDF generation logic for different transfer types.
-An abstract method buildDocumentRequest, which subclasses will implement to build entity-specific document requests.
-Constructor-based dependency injection for GenerateDocumentHelper, which will handle the actual PDF document generation.
-Subclass TransferPdfGenerator:
-
-Implement the TransferPdfGenerator class, extending SmartPdfGenerator to handle TransferAdviceRequest.
-Override buildDocumentRequest to create a DocumentRequest specific to the transfer advice.
-Include strategies to select content items (getContentItemExchange) and map data fields (mapDataFields) based on transfer types.
-Use a strategy to determine the file name dynamically using the getFileName method.
-Add metadata to DocumentRequest, such as documentGeneratedFor and documentGeneratedDate.
-Supporting Strategies:
-
-Implement helper classes or methods (ContentItemExchangeStrategy, DataFieldMapperStrategy, and FileNameStrategy) to handle the dynamic aspects of content generation.
-These strategies will help build content items, map data fields, and determine file names based on different transfer types.
-Updated Models:
-
-Modify PdfRequest to include fields documentGeneratedFor and documentGeneratedDate.
-Create a new subclass, TransferAdviceRequest, which extends PdfRequest and includes necessary transfer-related fields.
-Update PdfDocAttachment to reflect the fields for document storage.
-Outcome:
-This phase introduces a flexible and extensible smart PDF generation framework that can support different transfer types. The SmartPdfGenerator template method ensures the logic is reusable, while subclasses implement transfer-specific behavior.
-
-Phase 2: Enhancement in the Notification Service
-The second phase focuses on enhancing the NotificationService to support sending notifications with or without PDF attachments. This involves refactoring existing methods to handle additional parameters and making the service more flexible.
-
-Steps and Components
-Refactor processNotification Method:
-
-Overload the processNotification method to accept an optional PdfDocAttachment. The presence of this attachment will determine whether the email should include the PDF.
-Implement the logic within processNotification to decide the type of notification based on whether a PdfDocAttachment is provided:
-With Attachment: Calls notifyByEmailWithAttachment, passing the PDF as an attachment.
-Without Attachment: Calls notifyByEmail for regular email notifications.
-Remove direct dependencies on transfer-specific logic to make the method more generalized.
-Implement notifyByEmailWithAttachment:
-
-Create a private method notifyByEmailWithAttachment in NotificationService to handle email notifications that include a PDF attachment.
-Retrieve the ContentItem using the getContentItem method and use it to build the email body and subject.
-Utilize PdfHelper to apply encryption to the PDF if required and send the email using sendEmailWithAttachment.
-Additional Support Methods:
-
-Introduce helper methods like resolveLanguage and resolveChannelName to streamline the notification process.
-Incorporate logic for handling SMS and digital notifications in the processNotification method as per user preferences.
-Outcome:
-The enhanced NotificationService is now capable of dynamically including PDF attachments when sending notifications. This service is now decoupled from transfer-specific logic, allowing it to be extended in the future to handle other notification types.
-
-Phase 3: Enhancement in the Fund Transfers Service
-The final phase integrates the PDF generation and enhanced notification service into the fund transfer process. This includes making the decision to generate a PDF based on the transfer type and passing the necessary parameters to the notification service.
-
-Steps and Components
-Modify notifyPaymentSuccess Method in FundTransferService:
-
-Refactor the notifyPaymentSuccess method to handle different transfer types (WITHIN_UAE_FUNDS_TRANSFER and WITHIN_FAB_FUNDS_TRANSFER).
-Introduce logic to determine if a transfer advice PDF should be generated by using the shouldSendTransferAdvice method.
-For WITHIN_UAE_FUNDS_TRANSFER, only generate the PDF if the account supports IPP or IPI.
-For WITHIN_FAB_FUNDS_TRANSFER, always generate the PDF.
-Generate PDF Attachment:
-
-If the transfer requires a PDF, call TransferPdfGenerator.generatePdf to generate the document.
-Use transferAdvicePdfGenerator.buildEncryptionKey to get the necessary encryption key for the PDF.
-Store the resulting PdfDocAttachment for later use in the notification process.
-Update Content ID:
-
-Introduce getContentForTransferAdvice to append the word "ATTACHMENT" to the original ContentID, indicating that the notification includes a PDF attachment.
-Pass PDF to NotificationService:
-
-Pass the PdfDocAttachment to the NotificationService using the overloaded processNotification method.
-If no PDF is required, call processNotification without the attachment, falling back to the default notification process.
-Helper Methods:
-
-Implement utility methods like buildParametersForContent to construct the message arguments for the notification.
-Update the shouldSendTransferAdvice method to include the conditions for generating the PDF.
-Outcome:
-The FundTransferService is now capable of dynamically deciding whether to generate and send a transfer advice PDF based on the type of transfer. This logic is cleanly separated, reducing code duplication and making future extensions easier.
-
-Summary
-These three phases provide a cohesive solution for generating, managing, and delivering transfer advice PDFs:
-
-Phase 1: Introduces a smart, extensible PDF generation mechanism (SmartPdfGenerator and its subclass TransferPdfGenerator).
-Phase 2: Enhances the NotificationService to handle notifications with or without PDF attachments, improving flexibility.
-Phase 3: Integrates the smart PDF generation and enhanced notification handling into the fund transfer process in FundTransferService.
-This structured approach ensures the system adheres to the Open-Closed Principle, allowing for future enhancements and extensions without modifying the core logic.
+    NotificationService->>NotificationService: decide on SMS/Digital notification
+    NotificationService-->>TransferFundsService: Notification processed
+    TransferFundsService-->>PersonalBankingAPI: return transfer response
+    PersonalBankingAPI-->>App: return transfer response
+=================================
 sequenceDiagram
     participant App
     participant PersonalBankingAPI
