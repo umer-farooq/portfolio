@@ -1,15 +1,4 @@
-sequenceDiagram
-    participant App
-    participant PersonalBankingAPI
-    participant TransferFundsService
-    participant SmartPdfGenerator
-    participant TransferPdfGenerator
-    participant GenerateDocumentHelper
-    participant NotificationService
-    participant EmailService
-
-    App->>PersonalBankingAPI: initiateTransfer(transferRequest)
-    PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
+  PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
     
     TransferFundsService->>TransferFundsService: check if transfer type is WITHIN_UAE_FUNDS_TRANSFER or WITHIN_FAB_FUNDS_TRANSFER
     
@@ -52,9 +41,9 @@ sequenceDiagram
     TransferFundsService->>NotificationService: processNotification(contentID, sessionInfo, params, PdfDocAttachment)
     NotificationService->>NotificationService: check if PDF attachment is present
     alt If PDF attachment is present
-        NotificationService->>EmailService: notifyByEmailWithAttachment()
+        NotificationService->>NotificationService: sendEmailWithAttachment()
     else If PDF attachment is not present
-        NotificationService->>EmailService: notifyByEmail()
+        NotificationService->>NotificationService: sendEmail()
     end
 
     NotificationService->>NotificationService: decide on SMS/Digital notification
