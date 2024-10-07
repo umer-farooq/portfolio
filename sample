@@ -1,4 +1,67 @@
-  PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
+sequenceDiagram
+    participant App
+    participant PersonalBankingAPI
+    participant TransferFundsService
+    participant SmartPdfGenerator
+    participant TransferPdfGenerator
+    participant GenerateDocumentHelper
+    participant NotificationService
+
+    App->>PersonalBankingAPI: initiateTransfer(transferRequest)
+    PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
+    
+    TransferFundsService->>TransferFundsService: check if transfer type is WITHIN_UAE_FUNDS_TRANSFER or WITHIN_FAB_FUNDS_TRANSFER
+    
+    alt transferType is WITHIN_UAE_FUNDS_TRANSFER
+        TransferFundsService->>TransferFundsService: check if product type is Account
+        alt product type is Account
+            TransferFundsService->>TransferFundsService: check if IPI or IPP support is present
+            alt IPI or IPP support present
+                TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+                SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+                TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+                GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+                TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+                SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+                TransferFundsService->>TransferFundsService: update content ID for attachment
+            else IPI or IPP support not present
+                TransferFundsService->>TransferFundsService: Skip PDF generation
+            end
+        else product type is Card
+            TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+            SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+            TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+            GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+            TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+            SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+            TransferFundsService->>TransferFundsService: update content ID for attachment
+        end
+    else transferType is WITHIN_FAB_FUNDS_TRANSFER
+        TransferFundsService->>SmartPdfGenerator: generatePdf(transferRequest)
+        SmartPdfGenerator->>TransferPdfGenerator: buildDocumentRequest()
+        TransferPdfGenerator->>GenerateDocumentHelper: generateDocument(documentRequest)
+        GenerateDocumentHelper-->>TransferPdfGenerator: return PDF document
+        TransferPdfGenerator-->>SmartPdfGenerator: return PdfDocAttachment
+        SmartPdfGenerator-->>TransferFundsService: return PdfDocAttachment
+        TransferFundsService->>TransferFundsService: update content ID for attachment
+    else transfer type is neither
+        TransferFundsService->>TransferFundsService: Skip PDF generation
+    end
+
+    TransferFundsService->>NotificationService: processNotification(contentID, sessionInfo, params, PdfDocAttachment)
+    NotificationService->>NotificationService: check if PDF attachment is present
+    alt If PDF attachment is present
+        NotificationService->>NotificationService: sendEmailWithAttachment()
+    else If PDF attachment is not present
+        NotificationService->>NotificationService: sendEmail()
+    end
+
+    NotificationService->>NotificationService: decide on SMS/Digital notification
+    NotificationService-->>TransferFundsService: Notification processed
+    TransferFundsService-->>PersonalBankingAPI: return transfer response
+    PersonalBankingAPI-->>App: return transfer response
+-----------------------
+PersonalBankingAPI->>TransferFundsService: processTransfer(transferRequest)
     
     TransferFundsService->>TransferFundsService: check if transfer type is WITHIN_UAE_FUNDS_TRANSFER or WITHIN_FAB_FUNDS_TRANSFER
     
