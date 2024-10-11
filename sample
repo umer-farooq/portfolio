@@ -1,3 +1,32 @@
+@Stateless
+public abstract class SmartPdfGenerator<T extends PdfRequest> {
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
+    @EJB
+    protected GenerateDocumentHelper generateDocumentHelper;
+
+    public PdfDocAttachment generatePdf(T request) {
+        DocumentRequest documentRequest = buildDocumentRequest(request);
+        PdfDocAttachment response = null;
+        SessionInfo sessionInfo = SessionContext.getSession();
+
+        try {
+            String result = generateDocumentHelper.generateDocument(documentRequest, sessionInfo.getEnvironment());
+            if (Objects.nonNull(result)) {
+                log.info("Document Service generateDocument API returned with response: {}", result);
+                response = JsonUtils.convertToObject(PdfDocAttachment.class, result);
+            }
+        } catch (Exception e) {
+            log.error("Document Service generateDocument failed with exception: {}", e);
+        }
+
+        return response;
+    }
+
+    protected abstract DocumentRequest buildDocumentRequest(T request);
+}
+
+
 sequenceDiagram
     participant App
     participant PersonalBankingAPI
