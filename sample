@@ -8,6 +8,105 @@ https://idp-uat.bankfab.com/auth/nps-uat/oauth/token'
 --data-urlencode 'password=Test@1234' \
 --data-urlencode 'scope=openid email'
 
+public Mono<IdpGetAccessTokenResponse> getAccessToken(String requestedFor) {
+		log.info("Inside IdpInitiateService.getAccessToken() - start");
+		
+		if (StringUtil.isNullOrEmpty(requestedFor)) {
+			throw new AppException(ErrorMessage.SYS_MISSING_MANDATORY_FIELD);
+		}
+		
+		IdpGetAccessTokenResponse idpGetAccessTokenResponse = authnServiceCacheHelper.getIdpAccessTokenResponseCache(requestedFor+IDP_ACCESSTOKEN);
+		log.info("Response from cache{}",idpGetAccessTokenResponse);
+		  if(Objects.nonNull(idpGetAccessTokenResponse) &&
+		  DateTimeHelper.INSTANCE.isDatelessThenCurrentDateWithTimeStamp(idpGetAccessTokenResponse.getCreatedAt(), DATE_DDMMYYYYHHMM,idpGetAccessTokenResponse.getExpiresIn()))
+			  return Mono.just(idpGetAccessTokenResponse);
+		  
+		  else {
+			  
+			  String applicationUrl = getApplicationURL(requestedFor);
+
+				Mono<ConnectorResponse> asyncIdpResponse = asyncRestConnector.invokePostPut(
+						IdpServices.IDP_GET_ACCESS_TOKEN.name(), idpGetAccessTokenUrl, HttpMethod.POST,
+						preparePathParamforAuthorization(applicationUrl), prepareRequestForAccessToken(),
+						prepareHeadersforAuthorization(CLIENT_CREDENTIAL, requestedFor));
+
+				return asyncIdpResponse.flatMap(response -> {
+					String tokenResponse = handleIdpServiceError(response);
+					IdpGetAccessTokenResponse accessTokenResponse = JsonUtils
+							.convertToObjectUsingGson(IdpGetAccessTokenResponse.class, tokenResponse);
+					if (Objects.nonNull(accessTokenResponse)) {
+						accessTokenResponse
+								.setCreatedAt(new SimpleDateFormat(DATE_DDMMYYYYHHMM).format(new Date()));
+						authnServiceCacheHelper.storeAccesstoken(requestedFor+IDP_ACCESSTOKEN, accessTokenResponse);
+					}
+					return Mono.just(accessTokenResponse);
+
+				});
+				 
+		}
+		
+	}
+
+public <T> Mono<ConnectorResponse> invokePostPut(String serviceName, String url, HttpMethod httpMethod,
+			Map<String, String> pathParams, T requestObj, Map<String, String> headersMap, String... queryParams) {
+
+		String finalUrl = checkNgetServiceUrl(url, pathParams, headersMap, queryParams);
+		
+		String request = "{}";
+		if (Objects.nonNull(requestObj)) {
+			request = JsonUtils.convertToJsonUsingGson(requestObj);
+		}
+		
+		HttpHeaders headers = getHttpHeaders(serviceName, finalUrl, httpMethod, headersMap, MediaType.APPLICATION_JSON);
+		log.info("XREF: {}, Request: {}", headers.getFirst(BaseAppConstants.XREF), TextUtils.maskJsonFields(request));
+		long t1 = System.currentTimeMillis();
+
+		return getWebClient(finalUrl, false).method(httpMethod).uri(finalUrl)
+				.headers(header -> header.putAll(headers)).body(BodyInserters.fromValue(request))
+				.exchangeToMono(clientResponse -> processResponse(serviceName, finalUrl, headers, t1, clientResponse))
+				.contextCapture();
+
+	}
+
+private String checkNgetServiceUrl(String url, Map<String, String> pathParams, Map<String, String> headersMap,
+			String... queryParams) {
+		mapMDC(headersMap);
+		if(StringUtils.isBlank(url))
+			throw ServiceException.builder().message("URL Not FOUND").httpStatusCode(HttpStatus.NOT_FOUND).build();
+			
+		return getFinalServiceUrl(url, pathParams, queryParams);
+	}
+
+
+private String getFinalServiceUrl(String url, Map<String, String> pathParams, String... queryParams) {
+		StringBuilder urlBuilder = new StringBuilder();
+		urlBuilder.append(url);
+
+		if (Objects.nonNull(queryParams)) {
+
+			int index = 0;
+			for (String queryParam : queryParams) {
+				if (index == 0) {
+					urlBuilder.append(BaseAppConstants.QUESTION_STRING);
+					++index;
+				} else {
+					urlBuilder.append(BaseAppConstants.EMPERSON);
+				}
+				urlBuilder.append(queryParam);
+			}
+		}
+
+		String finalUrl = urlBuilder.toString();
+		if (Objects.nonNull(pathParams)) {
+			for (Map.Entry<String, String> entry : pathParams.entrySet()) {
+				finalUrl = finalUrl.replace(entry.getKey(), entry.getValue());
+			}
+		}
+		return finalUrl;
+	}
+	
+
+
 Scenario is when user is already having a beneficiary of transfer type INTERNATIONAL_FUNDS_TRANSFER then try to initiate the fund transfer by adding the same beneficiary with same account number, same transfer type (INTERNATIONAL_FUNDS_TRANSFER) with different beneficiary nick name then “Beneficiary Account Already Exists for Transaction Type” error message will be displayed to user.
 
 (As transfer type is INTERNATIONAL_FUNDS_TRANSFER, cooling period is true.)
