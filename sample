@@ -1,3 +1,26 @@
+Scenario is when user is already having a beneficiary of transfer type INTERNATIONAL_FUNDS_TRANSFER then try to initiate the fund transfer by adding the same beneficiary with same account number, same transfer type (INTERNATIONAL_FUNDS_TRANSFER) with different beneficiary nick name then “Beneficiary Account Already Exists for Transaction Type” error message will be displayed to user.
+
+(As transfer type is INTERNATIONAL_FUNDS_TRANSFER, cooling period is true.)
+
+Though error is displayed, new beneficiary is getting created in BENEFICIARY_CUSTOMER table with execution type as AUTO and also there is an entry in SI_MASTER table for same beneficiary. As error is displayed user might keep adding the beneficiary which causes multiple addition of beneficiary that leads multiple times execution of FT.
+
+
+
+
+For this issue fix we may add validation at first step itself so that user shouldn’t add new beneficiary with diff nick_name for same bene account number. Please take it forward on priority
+
+
+We have analyzed the below case and please find our observation below.
+
+
+
+
+Subject customer was maintaining active SWIFT transfer beneficairy for account (EG960003000300001734948484967) created on 08-MAY-23 via FAB Mobile App
+On 27-DEC-23 01.06PM, customer logged in to his Internet Banking (IB) and initiated a new beneficiary creation and SWIFT transfer for the same beneficiary (EG960003000300001734948484967). At the end of the journey, customer received below error where the beneficiary creation was failed by transfer was scheduled at backend (Cooling period).
+No alert was trigged to customer in this scenario.
+We can be able to reproduce this scenario from our side on 25-April-2024 (CIN: 3189338), where the beneficiary creation was failed but transfer was schedule as part of cooling period. We can able to delete the pending transfer from IB.
+
+
 Dear [Support Team],
 
 I hope this message finds you well. We are currently facing an issue where the cstransactionid is not being sent from the CallSign SDK during the transaction process.
