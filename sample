@@ -1,3 +1,13 @@
+curl --location --request POST '
+https://idp-uat.bankfab.com/auth/nps-uat/oauth/token'
+\
+--header 'Authorization: Basic XXXXXXXXXXx' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'grant_type=password' \
+--data-urlencode 'username=Trevion.Armstrong53' \
+--data-urlencode 'password=Test@1234' \
+--data-urlencode 'scope=openid email'
+
 Scenario is when user is already having a beneficiary of transfer type INTERNATIONAL_FUNDS_TRANSFER then try to initiate the fund transfer by adding the same beneficiary with same account number, same transfer type (INTERNATIONAL_FUNDS_TRANSFER) with different beneficiary nick name then “Beneficiary Account Already Exists for Transaction Type” error message will be displayed to user.
 
 (As transfer type is INTERNATIONAL_FUNDS_TRANSFER, cooling period is true.)
