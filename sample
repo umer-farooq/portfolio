@@ -1,3 +1,26 @@
+Dear [Support Team],
+
+I hope this message finds you well. We are currently facing an issue where the cstransactionid is not being sent from the CallSign SDK during the transaction process.
+
+To address this, could you please initiate an investigation and verify why the cstransactionid is missing? We have verified the SDK integration on our end and haven't identified any misconfigurations or discrepancies.
+
+Here are the details of the issue:
+
+Issue: cstransactionid missing from CallSign SDK
+SDK Version: [mention the version you're using]
+Environment: [mention if it's production, staging, etc.]
+Steps to Reproduce:
+[Step 1]
+[Step 2]
+[Step 3]
+We appreciate your assistance in resolving this matter as soon as possible. Please let us know if you need any further details from our side.
+
+Thank you for your prompt attention to this.
+
+Best regards,
+Umer Farooq
+[Your Position]
+[Your Contact Information]
 @Stateless
 public abstract class SmartPdfGenerator<T extends PdfRequest> {
 
