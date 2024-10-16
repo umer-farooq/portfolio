@@ -1,3 +1,16 @@
+For #2 - Customers who has never changed their password i.e. for whom the last password change date is unavailable in our records – We will refer the last login date and freeze it. If the login date is greater than the XX date , then we will prompt the customer to update their password on the next successful login.
+
+I would understand what above means is if last password update is null, use the last login date and if last login date + 90 < current system date – then ask user to change the password before he/she is able to proceed. 
+
+Now the scenario where this will fail:
+
+Customer last logged in on  3-Aug and has never changed password (so last password update is null). Now we go live on 15-Oct. Now if customer logs into IB on 1-Nov – as per above we will check 3-Aug + 90 days and it will be greater than current date – customer will be able to proceed without changing password and the last login date will get updated to 1-Nov. Again customer logs into 31-Dec and the rule will pass (1-Nov + 90 days > 31-Dec) and he/she will proceed and the last login will get updated to 31-Dec. 
+
+In the above scenario – the customer is not being required to change his password and is able to proceed. Only if he does not really login for 90 days or more, will customer be asked to change password and then the last password date would get updated. 
+
+If the above requirement is what is really needed, then in case if the last password date is null and we use the last login date for evaluation – we should update the last password update with last login date – so from last login date + 90 days or more customer is forced to change the password and the scenario which has been put above does not happen. 
+
+
 curl --location --request POST '
 https://idp-uat.bankfab.com/auth/nps-uat/oauth/token'
 \
