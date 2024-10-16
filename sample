@@ -1,3 +1,17 @@
+If lastPasswordUpdate is null:
+   a. If lastLoginDate is not null:
+      i. Calculate lastLoginDate + 90 days.
+      ii. If lastLoginDate + 90 days is before the current date:
+         - Set a flag indicating that a password change is required.
+         - Update lastPasswordUpdate to the current date (after the user changes the password).
+      iii. Else (lastLoginDate + 90 days is after the current date):
+         - Update lastPasswordUpdate to lastLoginDate for future evaluations.
+         - Save this update to the database.
+   b. Else (lastLoginDate is null):
+      i. Assume it's a new user scenario or fallback case.
+      ii. Set lastPasswordUpdate to the current date.
+      iii. Save this update to the database.
+
 Handling lastPasswordUpdate Null Scenarios
 Requirement ID: BR-003
 Description: For users where the "last password update date" is null, the system shall use the "last login date" to determine if a password change is required.
