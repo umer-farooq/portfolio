@@ -1,3 +1,175 @@
+Handling lastPasswordUpdate Null Scenarios
+Requirement ID: BR-003
+Description: For users where the "last password update date" is null, the system shall use the "last login date" to determine if a password change is required.
+Acceptance Criteria:
+If lastPasswordUpdate is null and lastLoginDate is available:
+Calculate lastLoginDate + 90 days and compare it with the current date.
+If the resulting date is less than or equal to the current date, prompt the user to change their password.
+Update lastPasswordUpdate to the current date once the password is changed.
+If the resulting date is greater than the current date, update lastPasswordUpdate to lastLoginDate and allow the user to proceed.
+If both lastPasswordUpdate and lastLoginDate are null, consider it as a new user scenario:
+Set lastPasswordUpdate to the current date and allow the user to proceed.
+Future logins will be evaluated using the updated lastPasswordUpdate.
+
+sequenceDiagram
+    participant User as User
+    participant Frontend as Internet Banking (IB)
+    participant Backend as Backend Server
+    participant DB as Database
+
+    User->>Frontend: Attempt to Login
+    Frontend->>Backend: Send Login Request (Username, Password)
+    Backend->>DB: Retrieve User's Last Password Update Date and Last Login Date
+    DB-->>Backend: Return Last Password Update Date and Last Login Date
+
+    alt lastPasswordUpdate is null
+        alt lastLoginDate is available
+            Backend->>Backend: Use lastLoginDate for evaluation
+            Backend->>Backend: Calculate lastLoginDate + 90 days
+            alt lastLoginDate + 90 days <= Current Date
+                Backend->>Frontend: Set Flag: Password Change Required
+                Frontend->>User: Redirect to Change Password Screen
+                User->>Frontend: Enter New Password
+                Frontend->>Backend: Send Change Password Request
+                Backend->>DB: Update Password and Set Last Password Update Date = Current Date
+                Backend->>Frontend: Password Change Successful
+            else lastLoginDate + 90 days > Current Date
+                Backend->>DB: Update Last Password Update Date = Last Login Date
+                Backend->>Frontend: Allow User to Proceed
+            end
+        else lastLoginDate is null
+            Backend->>Backend: Consider as a New User Scenario
+            Backend->>DB: Set Last Password Update Date = Current Date
+            Backend->>Frontend: Allow User to Proceed
+        end
+    else lastPasswordUpdate is not null
+        Backend->>Backend: Calculate Expiry Date (Last Password Update Date + 90 days)
+        alt Expiry Date <= Current Date
+            Backend->>Frontend: Set Flag: Password Change Required
+            Frontend->>User: Redirect to Change Password Screen
+            User->>Frontend: Enter New Password
+            Frontend->>Backend: Send Change Password Request
+            Backend->>DB: Update Password and Set Last Password Update Date = Current Date
+            Backend->>Frontend: Password Change Successful
+        else Expiry Date > Current Date
+            Backend->>Frontend: Set Flag: Password Change Not Required
+            Frontend->>User: Proceed to Home Screen
+        end
+    end
+
+    User->>Frontend: Initiate Forgot Password (Reset)
+    Frontend->>Backend: Send Reset Password Request
+    Backend->>DB: Reset Password and Set Last Password Update Date = Current Date
+    Backend->>Frontend: Password Reset Successful
+    Frontend->>User: Prompt to Login Again
+Explanation of the Combined Flow:
+Handling lastPasswordUpdate Null:
+
+When lastPasswordUpdate is null:
+If lastLoginDate is available, the system uses it for the 90-day check.
+If the user needs to change their password based on lastLoginDate, they are prompted to do so.
+If the user can proceed, lastPasswordUpdate is set to lastLoginDate to ensure future checks are consistent.
+If both lastPasswordUpdate and lastLoginDate are null, treat it as a new user scenario and set lastPasswordUpdate to the current date.
+Handling lastPasswordUpdate Not Null:
+
+The system directly uses lastPasswordUpdate for the 90-day expiry check.
+If the password has expired, the user is prompted to change their password.
+If the password has not expired, the user is allowed to proceed.
+Forgot Password Flow:
+
+When a user resets their password, the lastPasswordUpdate is updated to the current date to ensure the 90-day check starts fresh from the reset.
+This diagram now comprehensively covers scenarios where lastPasswordUpdate is null, integrates the fallback to lastLoginDate, and ensures secure handling of password updates and resets.
+
+
+
+
+
+
+
+
+
+
+
+
+
+To incorporate the updated solution into the design, considering scenarios with lastPasswordUpdate being null, and using lastLoginDate for evaluation, here’s how the logic will work:
+
+1. Enhanced Logic for lastPasswordUpdate Evaluation:
+Scenario 1: lastPasswordUpdate is not null, and it’s less than 90 days old.
+Action: Allow the user to proceed without requiring a password change.
+Scenario 2: lastPasswordUpdate is not null, and it’s greater than 90 days old.
+Action: Prompt the user to change their password upon login.
+Scenario 3: lastPasswordUpdate is null, and lastLoginDate is available.
+Step 1: Use lastLoginDate to evaluate the password change requirement.
+Calculate lastLoginDate + 90 days and compare it with the current system date.
+Step 2: If lastLoginDate + 90 days is greater than the current date:
+Update lastPasswordUpdate to lastLoginDate and allow the user to proceed without a password change.
+This ensures that the user is evaluated for password expiry during subsequent logins based on the updated lastPasswordUpdate.
+Step 3: If lastLoginDate + 90 days is less than or equal to the current date:
+Prompt the user to change their password before proceeding.
+Update lastPasswordUpdate to the current date once the password is changed.
+Scenario 4: lastPasswordUpdate and lastLoginDate are both null.
+This case typically indicates a new user who has just registered and not logged in yet.
+Action: Consider using the registration date as a reference.
+If registration date logic is available, use it to set lastPasswordUpdate.
+If not, allow the first login, set the lastPasswordUpdate to the current date, and ensure the next login is evaluated normally.
+2. Code Snippet for VerifyUserLoginSF.java:
+java
+Copy code
+LocalDate lastPasswordUpdate = userChannel.getLastPasswordUpdate();
+LocalDate lastLoginDate = userChannel.getLastLoginDate(); // Assume this exists
+
+if (lastPasswordUpdate == null) {
+    if (lastLoginDate != null) {
+        // Evaluate based on last login date
+        if (lastLoginDate.plusDays(90).isBefore(LocalDate.now())) {
+            // Password expired based on last login, set flag for password change
+            verifyUserLoginResponse.setPasswordChangeRequired(true);
+            userChannel.setLastPasswordUpdate(LocalDate.now()); // Update after password change
+        } else {
+            // Update lastPasswordUpdate to lastLoginDate to maintain consistency
+            userChannel.setLastPasswordUpdate(lastLoginDate);
+            userChannelRepository.save(userChannel);
+        }
+    } else {
+        // Handle new user scenario: consider using registration date
+        userChannel.setLastPasswordUpdate(LocalDate.now());
+        userChannelRepository.save(userChannel);
+    }
+} else {
+    // Use lastPasswordUpdate for regular password expiry check
+    if (lastPasswordUpdate.plusDays(90).isBefore(LocalDate.now())) {
+        verifyUserLoginResponse.setPasswordChangeRequired(true);
+    }
+}
+3. Improved Workflow:
+Scenario 3 Example:
+Customer’s lastLoginDate is 10-Oct-2024 and lastPasswordUpdate is null.
+Customer logs in on 1-Nov-2024:
+The system calculates 10-Oct-2024 + 90 days = 8-Jan-2025.
+Since 1-Nov-2024 is before 8-Jan-2025, the user is allowed to proceed, and lastPasswordUpdate is set to 10-Oct-2024.
+The next time the user logs in, lastPasswordUpdate is used for evaluation.
+Scenario 4 Example:
+A new user has registered but hasn’t logged in yet (lastLoginDate and lastPasswordUpdate are null).
+On first login, set lastPasswordUpdate to the current date (e.g., 1-Nov-2024).
+For future logins, evaluate the password change requirement using lastPasswordUpdate.
+4. Benefits of This Approach:
+Avoids the Pitfall: Prevents users from bypassing the password change requirement simply by logging in frequently.
+Ensures Consistency: By setting lastPasswordUpdate when using lastLoginDate for evaluation, it creates a clear reference point for subsequent checks.
+Handles Edge Cases: Covers scenarios where users may have null values for lastPasswordUpdate or lastLoginDate, maintaining security while offering a smooth user experience.
+5. Testing Considerations:
+Validate each scenario with users having different values for lastPasswordUpdate and lastLoginDate.
+Test the behavior for new users and those who have updated their passwords or logged in within various timeframes.
+Confirm that the system accurately prompts users to change their passwords when required and allows them to proceed when not.
+This enhanced solution ensures robust handling of the lastPasswordUpdate being null, making the system secure and user-friendly.
+
+
+
+
+
+
+`
+
 For #2 - Customers who has never changed their password i.e. for whom the last password change date is unavailable in our records – We will refer the last login date and freeze it. If the login date is greater than the XX date , then we will prompt the customer to update their password on the next successful login.
 
 I would understand what above means is if last password update is null, use the last login date and if last login date + 90 < current system date – then ask user to change the password before he/she is able to proceed. 
