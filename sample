@@ -14,6 +14,25 @@ ResourceItemAPIV2_info.03-04-2024.63.log:2024-04-03 22:44:40,797 [Thread-264 ] I
 [22:44:41.041] 81ec9798-9334-4071-a70f-581e07d10a8f, sendNotification , Service Response : {"applicationArea":{"correlationId":"S3cd1ecf89f0640bdab97fc49e6c98be6","transactionId":"81ec9798-9334-4071-a70f-581e07d10a8f","transactionDateTime":"2024-04-03T22:44:40.040Z","countryOfOrigin":"AE","senderId":"MOB"},"responseStatus":{"status":"ERROR","errorDetails":[{"errorCode":"GEN8003","errorDesc":"
 Missing Mandatory fields in Request payload"}]}}
 
+{
+   "applicationArea" : {
+      "countryOfOrigin" : "AE",
+      "senderId" : "RIB",
+      "transactionId" : "311066729",
+      "transactionDateTime" : "2023-12-22T00:00:21Z"
+   },
+   "dataArea" : {
+      "eventType" : "INTERNATIONAL_REMITTANCE_REWARDS",
+      "cif" : "1005433209",
+      "cin" : null,
+      "param1" : "500",
+      "param2" : "-12676",
+      "param3" : null,
+      "param4" : null,
+      "param5" : null
+   }
+}
+
 If lastPasswordUpdate is null:
    a. If lastLoginDate is not null:
       i. Calculate lastLoginDate + 90 days.
