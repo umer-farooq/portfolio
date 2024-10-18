@@ -1,3 +1,4 @@
+Regarding Huweii push notification, as per the  logs, the endpoint (https://dpuat.bankfab.com:2019/resourceitem/v2/notification/send) invoked by callsign while calling pushnotification service, the payload does not contain the cif. 
 success
 sendNotification CHANNEL: MSD DEVICE ID: 24 REQUEST URI: /
 resourceitem/v2/notification/send
