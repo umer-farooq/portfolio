@@ -1,3 +1,63 @@
+Hi Team,
+
+Please find the Issue Below & Fix the issue ASAP.
+
+ 
+
+Issue :
+
+One of the user is not able to enable international usage under Card control
+
+whenever he logout and login that changes are not saved.
+
+ 
+
+RCA :
+
+Issue was able to reproduce  in UAT env.
+
+after enable successfully fetchCardPolicy api giving false value for international option
+
+PRM-10449_Logs.txt
+
+It seems that the flag status is not updated instantly from middleware and the fetch api takes some time to show the updated flag value
+
+Attaching the logs and issue that has been reproduce
+
+Sequence of API invoked
+
+Fetch card status
+Update card status
+Fetch card status
+ 
+
+This needs to be checked with middleware team
+
+Resource:/ft/execute, Request:{"createAutopay":false,"createBeneficiary":false,"beneficiary":{"id":"B6824819-AB06-461B-BCD4-8D681796EB58","nickName":"vishal Jagtap","name":"Vishal Jagtap","templateId":"INTERNATIONAL_FUNDS_TRANSFER","acctOrCardNo":"DE68500105178297336485","type":"INTERNATIONAL_FUNDS_TRANSFER","address1":"USD","currency":"CAD","bankName":"Vishal Jagtap","bankAddress1":"USD","country":{"shortCode":"US","description":"United States of America","entityCode":"COUNTRY","sortingOrder":10,"keywords":"USA"},"transferTo":"ACCOUNT","routingCode":"DEUTDEFF1","swiftCode":"DEUTDEFF","ipiEnabled":false,"status":"ACTIVE","siAvailable":false,"ippEnabled":false},"transferCurrency":"USD","autopay":{"frequency":"","numberOfPayments":0},"transferType":"INTERNATIONAL_FUNDS_TRANSFER","sourceProductRef":"1011001501555041","transferDate":"18/10/2024","chargeOption":"OUR","transferPurposeCode":"IRP","sourceProductType":"ACCOUNT","sourceCurrency":"USD","amount":"255.68","chargeToCustomer":47.870000000000005,"transferDescription":"dfgds","fundTransferType":"INTERNATIONAL_FUNDS_TRANSFER","authKey":"703629","txnRef":"72eef191d33d4659ae36a87ec5ecd417","csTransactionId":"176559a4-825a-4c05-bafb-4696e9ca8a63","csTransactionType":"TRANSACTION_RISK_CHECKER"}
+
+
+
+ Fund Transfer: transferDate:18/10/2024 and isFutureDated:false, isCoolingPeriod:false
+18 Oct 2024 17:46:07,363 INFO (WebContainer : 9) (BROWSER-1002995108) [FundTransferSF:]: Execute Fund Transfer:INTERNATIONAL_FUNDS_TRANSFER
+18 Oct 2024 17:46:10,319 INFO (WebContainer : 9) (BROWSER-1002995108) [FundTransferSF:]: RoutingCode:DEUTDEFF1 - Override rules:[]
+18 Oct 2024 17:46:10,447 INFO (WebContainer : 9) (BROWSER-1002995108) [ExecuteTransferServiceInvoker:]: destination currency:CAD, crossCurrency:true
+18 Oct 2024 17:46:10,448 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: xref B6d06b365d504fcba6e4c1173350470d | channelType BROWSER
+18 Oct 2024 17:46:10,448 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Connecting to URL:https://kproxy-uat.pcdigital-dev.aeapps.bankfab.com/ae/pb/charge-information/v1/charges/fetch, RequestType:POST, Headers:[XREF: B6d06b365d504fcba6e4c1173350470d, LANGUAGE: EN, CHANNELID: IB, x-source-ip: 10.125.21.7, device-type: b]
+18 Oct 2024 17:46:10,448 INFO (WebContainer : 9) (BROWSER-1002995108) [TextUtils:]: Masking special chars in log
+18 Oct 2024 17:46:10,448 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Http Request:{"applicationArea":{"countryOfOrigin":"AE","creationDateTime":"18/Oct/2024 17:46:10","requiredExecutionDate":"18/Oct/2024 17:46:10","senderId":"IB","transactionDateTime":"2024-10-18T17:46:10.010Z","transactionId":"B6d06b365d504fcba6e4c1173350470d","language":"EN"},"customerId":"1501555","debitAccountIdentifier":"1011001501555041","debitAccountCurrency":"USD","creditAccountIdentifier":"DE68500105178297336485","creditAccountCurrency":"CAD","transactionType":"INTERNATIONAL_FUNDS_TRANSFER","transactionSubType":"INTERNATIONAL_FUNDS_TRANSFER","chargeType":"OUR","staffFlag":"false","amount":"255.68","customerTaxCategory":"001"}
+18 Oct 2024 17:46:17,908 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Status code 200
+18 Oct 2024 17:46:17,908 INFO (WebContainer : 9) (BROWSER-1002995108) [TextUtils:]: Masking special chars in log
+18 Oct 2024 17:46:17,908 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Http Response:{"applicationArea":{"countryOfOrigin":"AE","senderId":"IB","transactionId":"B6d06b365d504fcba6e4c1173350470d","transactionDateTime":"2024-10-18T17:46:10.010Z","language":"EN","creationDateTime":"18/Oct/2024 17:46:10","requiredExecutionDate":"18/Oct/2024 17:46:10"},"responseStatus":{"status":"SUCCESS"},"fetchChargesResponse":[{"chargeType":"OUR","chargeCurrency":"AED","chargeToCustomer":"45.59","totalTaxAmount":"2.28","chargeDetails":[{"chargeCode":"BANK","chargeAmount":"18.36","taxAmount":"0.92"},{"chargeCode":"TELEX","chargeAmount":"27.23","taxAmount":"1.36"}]}]}
+(BROWSER-1002995108) [ExecuteTransferServiceInvoker:]: charge applied is Charge [charge=Amount [value=47.870000000000005, valueFmt=47.87, currency=AED, valueLcy=null, valueDecimal=87, valueWhole=47], chargeType=OUR, taxAmount=2.28, chargeToCustomer=45.59]
+18 Oct 2024 17:46:17,913 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: xref B6d06b365d504fcba6e4c1173350470d | channelType BROWSER
+18 Oct 2024 17:46:17,913 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Connecting to URL:https://172.28.137.41:2020/financial/transactions/v1/payments/international, RequestType:POST, Headers:[XREF: B6d06b365d504fcba6e4c1173350470d, LANGUAGE: EN, CHANNELID: IB, x-source-ip: 10.125.21.7, device-type: b]
+18 Oct 2024 17:46:17,913 INFO (WebContainer : 9) (BROWSER-1002995108) [TextUtils:]: Masking special chars in log
+18 Oct 2024 17:46:17,913 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Http Request:{"cif":"1002995108","customerIdentifier":"1002995108","accountingUnitIdentifier":"AE0010001","debitAccountNo":"1011001501555041","creditAccountNo":"SW-ROYCCAT2XXX","transactionAmount":"255.68","transactionCurrency":"USD","creditAccountCurrency":"CAD","paymentDetails":"dfgds","chargeBearerIndicationType":"OUR","chargeToCustomer":"45.59","transferType":"IRP","beneficiary":{"beneName":"Vishal Jagtap","beneAddress":"USD","beneBankAccount":"DE68500105178297336485","beneCurrency":"CAD","beneBankSWIFTCode":"","beneBankRoutingCode":"DEUTDEFF1","beneBankName":"Vishal Jagtap","beneBankAddress":"USD","beneBankCountry":"US","transferBankName":"","beneCreatedOn":"22/05/2024","beneNickName":"vishal Jagtap","beneCreationChannel":"IB"},"exchangeRate":{"rateMode":"REALTIME","dealReferenceNumber":"f36154840478","buyCurrency":"CAD","sellCurrency":"USD","rate":"1.36699","gmRate":"1.36836","gmMargin":"0.00137","dealtCurrency":"USD","dealtAmount":"255.68","valueDate":"2024-10-21","entity":"AE0010001","daoCode":"103202234","gidId":"30169129","customerSegment":"RIB_BBGDefault","contraAmount":"349.51"},"templateId":"INTERNATIONAL_FUNDS_TRANSFER","transferMode":"ONETIME","taxAmount":"2.28"}
+18 Oct 2024 17:46:18,810 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Status code 200
+18 Oct 2024 17:46:18,810 INFO (WebContainer : 9) (BROWSER-1002995108) [TextUtils:]: Masking special chars in log
+18 Oct 2024 17:46:18,810 INFO (WebContainer : 9) (BROWSER-1002995108) [HttpConnector:]: Http Response:{"responseStatus":{"status":"ERROR","errorDetails":[{"errorCode":"INSUFFICIENT_ACCOUNT_BALANCE","errorDesc":"You do not have sufficient balance in your account"}]}}
+
+
 Upon investigating the logs, I observed that the endpoint being invoked by Callsign—https://dpuat.bankfab.com:2019/resourceitem/v2/notification/send—does not include the CIF (Customer Identification File) in the payload. This missing information is crucial for correctly processing the push notifications, as the CIF is typically required for the identification and routing of the notifications to the intended recipients.
 success
 sendNotification CHANNEL: MSD DEVICE ID: 24 REQUEST URI: /
