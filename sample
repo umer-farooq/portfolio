@@ -1,3 +1,25 @@
+1. Populate productlist based on TransferType
+(Refer to setup method of each transferType where its populating product array)
+switch (request.getFundTransferType()) {
+			case OWN_ACCT_FUNDS_TRANSFER:
+				productList = accessConfigurationSF.getCasaAsFundingSource(false, true);
+				break;
+		...	
+		
+		    case DF_CARD_PAYMENT:
+				 productList = accessConfigurationSF.getCasaAsFundingSource(false, true);
+				 break;
+				
+			default:
+				break;
+			}
+2. Filter product list based on the sourceAccount in the request and fetch balance
+Balance
+.stream().filter(acct -> acct.getBalance().equals(request.getSourceAccount())).findFirst().get().getBalance();
+
+
+3. Validate that if transferAmount is less than Balance if not throw an error
+
 Hi Team,
 
 Please find the Issue Below & Fix the issue ASAP.
