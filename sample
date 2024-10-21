@@ -1,3 +1,36 @@
+Dear Middleware Team,
+
+I hope this message finds you well. I’m reaching out to bring your attention to an issue that requires your immediate attention and resolution.
+
+Issue Summary:
+One of our users is experiencing a problem when trying to enable international usage under the Card Control feature. After enabling the international usage option, the changes do not persist, and upon logging out and logging back in, the setting is not saved.
+
+Steps to Reproduce:
+This issue has been successfully reproduced in the UAT environment. Below is a summary of the sequence that leads to the issue:
+
+The user enables the international usage option under Card Control.
+The change appears successful initially, but the fetchCardPolicy API is returning a false value for the international option post-enable.
+Upon logout and subsequent login, the flag remains unset.
+Root Cause Analysis (RCA):
+From our analysis and investigation, it appears that the flag status is not being updated instantly from the middleware layer. There seems to be a delay in the middleware updating the status, which causes the fetchCardPolicy API to reflect outdated information for the international usage option.
+
+Attached to this email are the logs from UAT that document the sequence of events, along with the specific error scenario that was reproduced.
+
+File: PRM-10449_Logs.txt
+Key Observation: After enabling the international usage flag successfully, the subsequent API call (fetchCardPolicy) returns an incorrect or outdated flag status.
+API Invocation Sequence:
+Fetch card status
+Update card status
+Fetch card status (incorrect/inconsistent value observed)
+This delay or failure in middleware updating the flag status is directly impacting the user experience, and we would appreciate your team’s immediate investigation and resolution.
+
+Action Required:
+Please investigate the middleware’s handling of the flag status update process and ensure that the fetchCardPolicy API returns the correct, updated value immediately after the status change. We kindly request that this issue be prioritized, as it is affecting the functionality of a critical feature.
+
+If you need any additional information or clarification, please do not hesitate to reach out.
+
+Looking forward to your prompt action and feedback on this matter.
+
 1. Populate productlist based on TransferType
 (Refer to setup method of each transferType where its populating product array)
 switch (request.getFundTransferType()) {
